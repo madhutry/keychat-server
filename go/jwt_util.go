@@ -7,11 +7,11 @@ import (
 	jwt "github.com/dgrijalva/jwt-go"
 )
 
-func GenerateToken(friezeAccessCode string, domainname string) (string, error) {
+func GenerateToken(friezeAccessCode string, domainName string) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"FriezeAccessCode": friezeAccessCode,
 		"DomainName":       domainName,
-		"nbf":              time.Now()
+		"nbf":              time.Now(),
 	})
 	tokenString, err := token.SignedString([]byte("secret"))
 	return tokenString, err
