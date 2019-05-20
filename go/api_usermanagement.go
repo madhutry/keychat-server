@@ -222,6 +222,35 @@ func GetMessages(w http.ResponseWriter, r *http.Request) string{
     log.Fatal("No Tockemmn")
   }
 }
+func SendMessage(w http.ResponseWriter, r *http.Request) string{
+  reqToken := r.Header.Get("Authorization")
+  domainName:= r.Host
+	var accessCode string;
+	if reqToken!=nill {
+		splitToken := strings.Split(reqToken, "Bearer")
+		reqToken = splitToken[1]
+		token, err := VerifyToken(strings.TrimSpace(reqToken))
+		if err != nil {
+			log.Fatal(err)
+		}
+    accessCode=token["FriezeAccessCode"]
+    body, readErr := ioutil.ReadAll(r.Body)
+    defer r.Body.Close()
+    if readErr != nil {
+      log.Fatal(readErr)
+    }
+    var f interface{}
+    json.Unmarshal([]byte(body), &f)
+    m := f.(map[string]string)
+    roomId,matAccessCode,prevBatchID := dbGetAllDetails(accessCode,domainName)
+    result:=apiSendMessage(matAccessCode,roomId,m["message"])
+    enc := json.NewEncoder(w) //
+    enc.Encode(result)
+  }else{
+    log.Fatal("No Tockemmn")
+  }
+	
+}
 func apiGetMessages(accessCode string,roomId string,previousBatch string) (map[string]interface{}){
   roomAlias := pborman.NewRandom().String()
   fromPrevBatch := ""
@@ -259,5 +288,26 @@ func apiGetMessages(accessCode string,roomId string,previousBatch string) (map[s
         "messages":   messages,
       }
       return f
+  }
+}
+
+func apiSendMessage(matAccessCode string, roomId string, message string){
+  jsonData := map[string]string{
+      "msgtype":"m.text", 
+      "body":message
+    }
+	apiHost := "http://%s/_matrix/client/r0/rooms/%s/send/m.room.message?access_token=%s"
+	endpoint := fmt.Sprintf(apiHost,matrixApiHost,roomId,accessCode)
+	jsonValue, _ := json.Marshal(jsonData)
+	response, err := http.Post(endpoint, "application/json", bytes.NewBuffer(jsonValue))
+	if err != nil {
+		fmt.Printf("The HTTP request failed with error %s\n", err)
+		return
+	} else {
+    data, _ := ioutil.ReadAll(response.Body)
+    var f interface{}
+    json.Unmarshal([]byte(body), &f)
+
+    m := f.(map[string]interface{})
   }
 }
