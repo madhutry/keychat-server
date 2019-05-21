@@ -1,0 +1,75 @@
+package friezechat
+
+import (
+	"log"
+	"net/http"
+
+	"github.com/gorilla/websocket"
+)
+
+type Message struct {
+	MessageText string
+	Token       string
+}
+
+var broadcast = make(chan Message)
+var clients = make(map[string]map[string]*websocket.Conn)
+
+var upgrader = websocket.Upgrader{
+	CheckOrigin: func(r *http.Request) bool {
+		return true
+	},
+}
+
+func UpgradeWS(w http.ResponseWriter, r *http.Request) {
+	ws, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer ws.Close()
+	for {
+		var msg Message
+		err := ws.ReadJSON(&msg)
+		if err != nil {
+			log.Printf("error: %v", err)
+			log.Fatal(err)
+		}
+		broadcast <- msg
+	}
+}
+
+/* func ReceiveNotification(w http.ResponseWriter, req *http.Request) {
+	data, _ := ioutil.ReadAll(req.Body)
+	var f interface{}
+	json.Unmarshal([]byte(data), &f)
+
+	m := f.(map[string]interface{})
+	eventId := m["notification"].(map[string]interface{})["event_id"].(string)
+	roomId = m["notification"].(map[string]interface{})["room_id"].(string)
+
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	w.WriteHeader(http.StatusOK)
+} */
+/* func apiGetEventIdDetails(eventId string, roomId string, accessCode string) map[string]interface{} {
+	apiHost := "http://%s/_matrix/client/r0/rooms/%s/event/%s?access_token=%s"
+	endpoint := fmt.Sprintf(apiHost, roomId, eventId, accessCode)
+	fmt.Println(endpoint)
+	response, err := http.Get(endpoint)
+	if err != nil {
+		fmt.Printf("The HTTP request failed with error %s\n", err)
+		return nil
+	} else {
+		data, _ := ioutil.ReadAll(response.Body)
+		var f interface{}
+		json.Unmarshal([]byte(data), &f)
+		m := f.(map[string]interface{})
+		sender := m["sender"].(string)
+		timeRecvd := m["origin_server_ts"].(string)
+		mesg := m["content"].(map[string]interface{})["body"].(string)
+		result := map[string]interface{}{
+			"timestamp": timeRecvd,
+			"message":   mesg,
+		}
+		return result
+	}
+} */

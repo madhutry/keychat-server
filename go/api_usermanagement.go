@@ -111,7 +111,23 @@ func dbGetAllDetails(accessCode string, domainName string) (string, string, stri
 	val, _ := prevBatchId.Value()
 	return roomId, matAccessCode, val.(string)
 }
+func dbGetDomainRelatedData(domainName string) string {
 
+	matAccCode := `SELECT 
+	matrix_access_code
+	FROM mat_acc_cd_owner
+	WHERE domain_name=$1
+`
+	var matAccessCode string
+	db := Envdb.db
+
+	matAccCodeStmt, err := db.Prepare(matAccCode)
+	if err != nil {
+		log.Fatal(err)
+	}
+	matAccCodeStmt.QueryRow(domainName).Scan(&matAccessCode)
+	return matAccessCode
+}
 func dbInsertNewAccessCode(matrixAccessCode string, friezeChatAccessCode string, domainName string, regId string) {
 	addAccessCodeMap := `INSERT INTO access_code_map 
     (  matrix_access_code, frieze_access_code,domain_name,insert_dt,registration_id)
@@ -176,6 +192,8 @@ func registerMatrixChatUser(fullname string, mobileno string,
 		}
 		err = db.Ping()
 		roomId, roomAlias := apiCreateRoom(matrixAccessCode)
+		ownerAccessCode := dbGetDomainRelatedData(domainName)
+		apiJoinRoom(ownerAccessCode, roomId)
 		result := apiGetMessages(matrixAccessCode, roomId, "")
 		startBatchId := result["startBatch"].(string)
 		dbInsertRegistration(fullname, mobileno, friezeAccessCode, regId, roomId, roomAlias, startBatchId)
@@ -275,11 +293,14 @@ func apiGetMessages(accessCode string, roomId string, previousBatch string) map[
 		chunks := m["chunk"].([]interface{})
 		var messages [][]string
 		for _, chunk := range chunks {
-			mesg := chunk.(map[string]interface{})["content"].(map[string]interface{})["body"].(string)
-			ts := chunk.(map[string]interface{})["origin_server_ts"].(float64)
-			tsString := fmt.Sprintf("%f", ts)
-			mesg1 := []string{mesg, tsString}
-			messages = append(messages, mesg1)
+			typeKey := chunk.(map[string]interface{})["type"].(string)
+			if typeKey == "m.room.message" {
+				mesg := chunk.(map[string]interface{})["content"].(map[string]interface{})["body"].(string)
+				ts := chunk.(map[string]interface{})["origin_server_ts"].(float64)
+				tsString := fmt.Sprintf("%f", ts)
+				mesg1 := []string{mesg, tsString}
+				messages = append(messages, mesg1)
+			}
 		}
 		result := map[string]interface{}{
 			"startBatch": startbatch,
@@ -296,6 +317,21 @@ func apiSendMessage(matAccessCode string, roomId string, message string) {
 	}
 	apiHost := "http://%s/_matrix/client/r0/rooms/%s/send/m.room.message?access_token=%s"
 	endpoint := fmt.Sprintf(apiHost, matrixApiHost, roomId, matAccessCode)
+	jsonValue, _ := json.Marshal(jsonData)
+	response, err := http.Post(endpoint, "application/json", bytes.NewBuffer(jsonValue))
+	if err != nil {
+		fmt.Printf("The HTTP request failed with error %s\n", err)
+		return
+	} else {
+		data, _ := ioutil.ReadAll(response.Body)
+		var f interface{}
+		json.Unmarshal([]byte(data), &f)
+	}
+}
+func apiJoinRoom(matAccCode string, roomId string) {
+	jsonData := map[string]string{}
+	apiHost := "http://%s/_matrix/client/r0/join/%s?access_token=%s"
+	endpoint := fmt.Sprintf(apiHost, matrixApiHost, roomId, matAccCode)
 	jsonValue, _ := json.Marshal(jsonData)
 	response, err := http.Post(endpoint, "application/json", bytes.NewBuffer(jsonValue))
 	if err != nil {

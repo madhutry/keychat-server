@@ -64,6 +64,20 @@ var routes = Routes{
 		SendMessage,
 		true,
 	},
+	/* 	Route{
+		"ReceiveNotification",
+		strings.ToUpper("Post"),
+		"/_matrix/push/v1/notify",
+		ReceiveNotification,
+		true,
+	}, */
+	/* 	Route{
+		"UpgradeWS",
+		strings.ToUpper("get"),
+		"/ws",
+		UpgradeWS,
+		true,
+	}, */
 }
 
 func authMiddleware(next http.Handler) http.Handler {
