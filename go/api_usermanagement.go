@@ -114,6 +114,23 @@ func dbGetAllDetails(accessCode string, domainName string) (string, string, stri
 	val, _ := prevBatchId.Value()
 	return roomId, matAccessCode, val.(string), userId
 }
+
+func dbGetNotifcationDetails(roomId string) string {
+
+	matAccCode := `select a.matrix_access_code from access_code_map a , chat_registration b
+	where b.room_id=$1 and a.registration_id=b.id
+`
+	var matAccessCode string
+	db := Envdb.db
+
+	matAccCodeStmt, err := db.Prepare(matAccCode)
+	if err != nil {
+		log.Fatal(err)
+	}
+	matAccCodeStmt.QueryRow(roomId).Scan(&matAccessCode)
+	return matAccessCode
+}
+
 func dbGetDomainRelatedData(domainName string) string {
 
 	matAccCode := `SELECT 
@@ -285,7 +302,7 @@ func sendMessage(friezeAccessCode string, domainName string, message string) {
 }
 func apiGetMessages(accessCode string, roomId string, previousBatch string) map[string]interface{} {
 	fromPrevBatch := ""
-	apiHost := "http://%s/_matrix/client/r0/rooms/%s/messages?access_token=%s%s"
+	apiHost := "http://%s/_matrix/client/r0/rooms/%s/messages?limit=1000&access_token=%s%s"
 	if len(previousBatch) > 1 {
 		fromPrevBatch = fmt.Sprintf("&from=%s", previousBatch)
 	}

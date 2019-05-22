@@ -69,7 +69,7 @@ var routes = Routes{
 		strings.ToUpper("Post"),
 		"/_matrix/push/v1/notify",
 		ReceiveNotification,
-		true,
+		false,
 	}, */
 	Route{
 		"UpgradeWS",

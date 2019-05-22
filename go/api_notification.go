@@ -12,8 +12,15 @@ type Message struct {
 	MessageText string `json:"message"`
 	Token       string `json:"token"`
 }
+type ReceivedMesg struct {
+	MessageText string `json:"message"`
+	Sender      string `json:"sender"`
+	Timestamp   string `json:"timestamp"`
+	RoomId      string
+}
 
 var broadcast = make(chan Message)
+var receiver = make(chan ReceivedMesg)
 var clients = make(map[string]map[string]*websocket.Conn)
 
 var upgrader = websocket.Upgrader{
@@ -68,19 +75,35 @@ func HandleMessages() {
 	}
 }
 
-/* func ReceiveNotification(w http.ResponseWriter, req *http.Request) {
+/* func HandleReceiveMessages() {
+	for {
+		// grab next message from the broadcast channel
+		msg := <-receiver
+		for _, v := range clients[msg.RoomId] {
+			v.WriteJSON(msg)
+		}
+	}
+}
+func ReceiveNotification(w http.ResponseWriter, req *http.Request) {
 	data, _ := ioutil.ReadAll(req.Body)
 	var f interface{}
 	json.Unmarshal([]byte(data), &f)
 
 	m := f.(map[string]interface{})
 	eventId := m["notification"].(map[string]interface{})["event_id"].(string)
-	roomId = m["notification"].(map[string]interface{})["room_id"].(string)
+	roomId := m["notification"].(map[string]interface{})["room_id"].(string)
+	matAccessCode := dbGetNotifcationDetails(roomId)
+	mesgDetails := apiGetEventIdDetails(eventId, roomId, matAccessCode)
+	recevdMesg := ReceivedMesg{
+		MessageText: mesgDetails["message"].(string),
+		Sender:      mesgDetails["sender"].(string),
+		Timestamp:   mesgDetails["timestamp"].(string),
+		RoomId:      mesgDetails["roomId"].(string),
+	}
+	receiver <- recevdMesg
+}
 
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	w.WriteHeader(http.StatusOK)
-} */
-/* func apiGetEventIdDetails(eventId string, roomId string, accessCode string) map[string]interface{} {
+func apiGetEventIdDetails(eventId string, roomId string, accessCode string) map[string]interface{} {
 	apiHost := "http://%s/_matrix/client/r0/rooms/%s/event/%s?access_token=%s"
 	endpoint := fmt.Sprintf(apiHost, roomId, eventId, accessCode)
 	fmt.Println(endpoint)
@@ -99,6 +122,8 @@ func HandleMessages() {
 		result := map[string]interface{}{
 			"timestamp": timeRecvd,
 			"message":   mesg,
+			"sender":    sender,
+			"roomId":    roomId,
 		}
 		return result
 	}
