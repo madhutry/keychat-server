@@ -75,10 +75,11 @@ func dbDeactivateOldAccessCode(friezeChatAccessCode string, domainName string) {
 		panic(err)
 	}
 }
-func dbInsertRegistration(fullName string, mobile string, friezeAccessCode string, regId string, roomId string, roomAlias string, prevBatchId string) {
+func dbInsertRegistration(fullName string, mobile string,
+	friezeAccessCode string, regId string, roomId string, roomAlias string, prevBatchId string, userId string) {
 
-	insertRegister := `INSERT INTO chat_registration (id,full_name,mobile,create_dt,room_id,room_alias,prev_batch_id)
-  VALUES ($1,$2,$3,$4,$5,$6,$7);`
+	insertRegister := `INSERT INTO chat_registration (id,full_name,mobile,create_dt,room_id,room_alias,prev_batch_id,user_id)
+  VALUES ($1,$2,$3,$4,$5,$6,$7,$8);`
 	db := Envdb.db
 
 	insertRegisterStmt, err := db.Prepare(insertRegister)
@@ -86,14 +87,14 @@ func dbInsertRegistration(fullName string, mobile string, friezeAccessCode strin
 		log.Fatal(err)
 	}
 	defer insertRegisterStmt.Close()
-	_, err = insertRegisterStmt.Exec(regId, fullName, mobile, time.Now(), roomId, roomAlias, prevBatchId)
+	_, err = insertRegisterStmt.Exec(regId, fullName, mobile, time.Now(), roomId, roomAlias, prevBatchId, userId)
 	if err != nil {
 		panic(err)
 	}
 }
-func dbGetAllDetails(accessCode string, domainName string) (string, string, string) {
+func dbGetAllDetails(accessCode string, domainName string) (string, string, string, string) {
 
-	matAccCode := `SELECT room_id,b.matrix_access_code,a.prev_batch_id
+	matAccCode := `SELECT room_id,b.matrix_access_code,a.prev_batch_id,a.user_id
   FROM chat_registration a,access_code_map b
   where a.id=b.registration_id
   and b.frieze_access_code=$1
@@ -101,15 +102,17 @@ func dbGetAllDetails(accessCode string, domainName string) (string, string, stri
 	var roomId string
 	var matAccessCode string
 	var prevBatchId sql.NullString
+	var userId string
+
 	db := Envdb.db
 
 	matAccCodeStmt, err := db.Prepare(matAccCode)
 	if err != nil {
 		log.Fatal(err)
 	}
-	matAccCodeStmt.QueryRow(accessCode, domainName).Scan(&roomId, &matAccessCode, &prevBatchId)
+	matAccCodeStmt.QueryRow(accessCode, domainName).Scan(&roomId, &matAccessCode, &prevBatchId, &userId)
 	val, _ := prevBatchId.Value()
-	return roomId, matAccessCode, val.(string)
+	return roomId, matAccessCode, val.(string), userId
 }
 func dbGetDomainRelatedData(domainName string) string {
 
@@ -186,6 +189,7 @@ func registerMatrixChatUser(fullname string, mobileno string,
 
 		m := f.(map[string]interface{})
 		matrixAccessCode := m["access_token"].(string)
+		userId := m["user_id"].(string)
 		db := Envdb.db
 		if err != nil {
 			panic(err)
@@ -196,7 +200,7 @@ func registerMatrixChatUser(fullname string, mobileno string,
 		apiJoinRoom(ownerAccessCode, roomId)
 		result := apiGetMessages(matrixAccessCode, roomId, "")
 		startBatchId := result["startBatch"].(string)
-		dbInsertRegistration(fullname, mobileno, friezeAccessCode, regId, roomId, roomAlias, startBatchId)
+		dbInsertRegistration(fullname, mobileno, friezeAccessCode, regId, roomId, roomAlias, startBatchId, userId)
 		dbInsertNewAccessCode(matrixAccessCode, friezeAccessCode, domainName, regId)
 		return matrixAccessCode
 	}
@@ -238,25 +242,30 @@ func GetMessages(w http.ResponseWriter, r *http.Request) {
 			log.Fatal(err)
 		}
 		accessCode = token["FriezeAccessCode"].(string)
-		roomId, matAccessCode, prevBatchID := dbGetAllDetails(accessCode, domainName)
+		roomId, matAccessCode, prevBatchID, userId := dbGetAllDetails(accessCode, domainName)
 		result := apiGetMessages(matAccessCode, roomId, prevBatchID)
+		result["userId"] = userId
 		enc := json.NewEncoder(w) //
 		enc.Encode(result)
 	} else {
 		log.Fatal("No Tockemmn")
 	}
 }
+func retrieveToken(reqToken string) map[string]interface{} {
+	splitToken := strings.Split(reqToken, "Bearer")
+	reqToken = splitToken[1]
+	token, err := VerifyToken(strings.TrimSpace(reqToken))
+	if err != nil {
+		log.Fatal(err)
+	}
+	return token
+}
 func SendMessage(w http.ResponseWriter, r *http.Request) {
 	reqToken := r.Header.Get("Authorization")
 	domainName := r.Host
 	var accessCode string
 	if len(reqToken) > 1 {
-		splitToken := strings.Split(reqToken, "Bearer")
-		reqToken = splitToken[1]
-		token, err := VerifyToken(strings.TrimSpace(reqToken))
-		if err != nil {
-			log.Fatal(err)
-		}
+		token := retrieveToken(reqToken)
 		accessCode = token["FriezeAccessCode"].(string)
 		body, readErr := ioutil.ReadAll(r.Body)
 		defer r.Body.Close()
@@ -265,11 +274,14 @@ func SendMessage(w http.ResponseWriter, r *http.Request) {
 		}
 		var f map[string]string
 		json.Unmarshal([]byte(body), &f)
-		roomId, matAccessCode, _ := dbGetAllDetails(accessCode, domainName)
-		apiSendMessage(matAccessCode, roomId, f["message"])
+		sendMessage(accessCode, domainName, f["message"])
 	} else {
 		log.Fatal("No Tockemmn")
 	}
+}
+func sendMessage(friezeAccessCode string, domainName string, message string) {
+	roomId, matAccessCode, _, _ := dbGetAllDetails(friezeAccessCode, domainName)
+	apiSendMessage(matAccessCode, roomId, message)
 }
 func apiGetMessages(accessCode string, roomId string, previousBatch string) map[string]interface{} {
 	fromPrevBatch := ""
@@ -297,8 +309,10 @@ func apiGetMessages(accessCode string, roomId string, previousBatch string) map[
 			if typeKey == "m.room.message" {
 				mesg := chunk.(map[string]interface{})["content"].(map[string]interface{})["body"].(string)
 				ts := chunk.(map[string]interface{})["origin_server_ts"].(float64)
+				sender := chunk.(map[string]interface{})["sender"].(string)
+
 				tsString := fmt.Sprintf("%f", ts)
-				mesg1 := []string{mesg, tsString}
+				mesg1 := []string{mesg, tsString, sender}
 				messages = append(messages, mesg1)
 			}
 		}

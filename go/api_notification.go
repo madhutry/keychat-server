@@ -1,6 +1,7 @@
 package friezechat
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 
@@ -8,8 +9,8 @@ import (
 )
 
 type Message struct {
-	MessageText string
-	Token       string
+	MessageText string `json:"message"`
+	Token       string `json:"token"`
 }
 
 var broadcast = make(chan Message)
@@ -22,19 +23,48 @@ var upgrader = websocket.Upgrader{
 }
 
 func UpgradeWS(w http.ResponseWriter, r *http.Request) {
-	ws, err := upgrader.Upgrade(w, r, nil)
+	conn, err := upgrader.Upgrade(w, r, nil)
+	cookie, _ := r.Cookie("X-Authorization")
+	if cookie == nil {
+		fmt.Print("Cookie returned null Auth Token")
+		return
+	}
+	reqToken := cookie.Value
+	token := retrieveToken(reqToken)
+	friezeAccessCode := token["FriezeAccessCode"].(string)
+	domainName := token["DomainName"].(string)
+	populateWSMap(friezeAccessCode, domainName, conn)
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer ws.Close()
+	defer conn.Close()
 	for {
 		var msg Message
-		err := ws.ReadJSON(&msg)
+		err := conn.ReadJSON(&msg)
 		if err != nil {
-			log.Printf("error: %v", err)
-			log.Fatal(err)
+			log.Println(err)
+			return
 		}
 		broadcast <- msg
+	}
+}
+func populateWSMap(friezeAccessCode string, domainName string, conn *websocket.Conn) {
+	roomId, _, _, userId := dbGetAllDetails(friezeAccessCode, domainName)
+	if clients[roomId] == nil {
+		clients[roomId] = make(map[string]*websocket.Conn)
+	}
+	clients[roomId][userId] = conn
+}
+func HandleMessages() {
+	for {
+		// grab next message from the broadcast channel
+		msg := <-broadcast
+		mesg := msg.MessageText
+		auth := msg.Token
+		token := retrieveToken(fmt.Sprintf("Bearer %s", auth))
+		friezeAccessCode := token["FriezeAccessCode"].(string)
+		domainName := token["DomainName"].(string)
+		sendMessage(friezeAccessCode, domainName, mesg)
 	}
 }
 

@@ -22,6 +22,8 @@ func main() {
 	log.Printf("Server started")
 
 	router := sw.NewRouter()
+	go sw.HandleMessages()
+
 	sw.InitSqllite()
 	log.Fatal(http.ListenAndServe(":6060", router))
 }
