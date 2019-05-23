@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -215,8 +216,7 @@ func registerMatrixChatUser(fullname string, mobileno string,
 		roomId, roomAlias := apiCreateRoom(matrixAccessCode)
 		log.Println("Adding Owner to room :" + domainName)
 		ownerAccessCode := dbGetDomainRelatedData(domainName)
-		log.Println("Added Token for Owner to room :" + len(ownerAccessCode))
-
+		log.Println("Added Token for Owner to room :" + strconv.Itoa(len(ownerAccessCode)))
 		apiJoinRoom(ownerAccessCode, roomId)
 		result := apiGetMessages(matrixAccessCode, roomId, "")
 		startBatchId := result["startBatch"].(string)
