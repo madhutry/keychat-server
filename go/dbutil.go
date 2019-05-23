@@ -7,8 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
-	_ "github.com/mattn/go-sqlite3" //dsds
+	//_ "github.com/mattn/go-sqlite3" //dsds
 )
 
 type Env struct {
@@ -36,10 +35,12 @@ func InitPostgres() {
 	}
 	Envdb = &Env{db: db}
 }
-func InitSqllite() {
+
+/* func InitSqllite() {
 	db, err := sql.Open("sqlite3", "/home/gogreek/projects/code/git/frieze-db/chat.db")
 	if err != nil {
 		log.Fatal(err)
 	}
 	Envdb = &Env{db: db}
 }
+*/

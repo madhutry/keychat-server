@@ -24,6 +24,6 @@ func main() {
 	router := sw.NewRouter()
 	go sw.HandleMessages()
 
-	sw.InitSqllite()
+	sw.InitPostgres()
 	log.Fatal(http.ListenAndServe(":6060", router))
 }
