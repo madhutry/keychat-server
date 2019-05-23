@@ -14,7 +14,7 @@ import (
 	pborman "github.com/pborman/uuid"
 )
 
-const matrixApiHost = "192.168.122.188"
+const matrixApiHost = "localhost:8008"
 
 func OpenChat(w http.ResponseWriter, r *http.Request) {
 	reqToken := r.Header.Get("Authorization")
@@ -213,7 +213,10 @@ func registerMatrixChatUser(fullname string, mobileno string,
 		}
 		err = db.Ping()
 		roomId, roomAlias := apiCreateRoom(matrixAccessCode)
+		log.Println("Adding Owner to room :" + domainName)
 		ownerAccessCode := dbGetDomainRelatedData(domainName)
+		log.Println("Added Token for Owner to room :" + len(ownerAccessCode))
+
 		apiJoinRoom(ownerAccessCode, roomId)
 		result := apiGetMessages(matrixAccessCode, roomId, "")
 		startBatchId := result["startBatch"].(string)
