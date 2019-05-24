@@ -21,17 +21,7 @@ func OpenChat(w http.ResponseWriter, r *http.Request) {
 	reqToken := r.Header.Get("Authorization")
 	newFriezeChatAccessCode := pborman.NewRandom().String()
 
-	domainName := r.Host
 	var accessCode string
-	if len(reqToken) > 0 {
-		splitToken := strings.Split(reqToken, "Bearer")
-		reqToken = splitToken[1]
-		token, err := VerifyToken(strings.TrimSpace(reqToken))
-		if err != nil {
-			log.Fatal(err)
-		}
-		accessCode = token["FriezeAccessCode"].(string)
-	}
 	body, readErr := ioutil.ReadAll(r.Body)
 	defer r.Body.Close()
 	if readErr != nil {
@@ -43,6 +33,8 @@ func OpenChat(w http.ResponseWriter, r *http.Request) {
 	if len(reqToken) == 0 {
 		fullname := m["fullname"]
 		mobileno := m["mobileno"]
+		domainName := m["domainName"].(string)
+
 		regId := pborman.NewRandom().String()
 		registerMatrixChatUser(fullname.(string), mobileno.(string), newFriezeChatAccessCode, domainName, regId)
 		newJWTToken, _ := GenerateToken(newFriezeChatAccessCode, domainName)
@@ -53,6 +45,15 @@ func OpenChat(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 		w.WriteHeader(http.StatusOK)
 	} else {
+		splitToken := strings.Split(reqToken, "Bearer")
+		reqToken = splitToken[1]
+		token, err := VerifyToken(strings.TrimSpace(reqToken))
+		if err != nil {
+			log.Fatal(err)
+		}
+		accessCode = token["FriezeAccessCode"].(string)
+		domainName := token["DomainName"].(string)
+
 		matAccessCode, regId := getMatrixAccessCode(accessCode, domainName)
 		dbDeactivateOldAccessCode(accessCode, domainName)
 		dbInsertNewAccessCode(matAccessCode, newFriezeChatAccessCode, domainName, regId)
@@ -94,7 +95,7 @@ func dbInsertRegistration(fullName string, mobile string,
 	}
 }
 func dbGetAllDetails(accessCode string, domainName string) (string, string, string, string) {
-
+	log.Println("dbGetAllDetails:" + accessCode + ":" + domainName)
 	matAccCode := `SELECT room_id,b.matrix_access_code,a.prev_batch_id,a.user_id
   FROM chat_registration a,access_code_map b
   where a.id=b.registration_id
@@ -252,7 +253,6 @@ func apiCreateRoom(accessCode string) (string, string) {
 }
 func GetMessages(w http.ResponseWriter, r *http.Request) {
 	reqToken := r.Header.Get("Authorization")
-	domainName := r.Host
 	var accessCode string
 	if len(reqToken) > 0 {
 		splitToken := strings.Split(reqToken, "Bearer")
@@ -262,6 +262,8 @@ func GetMessages(w http.ResponseWriter, r *http.Request) {
 			log.Fatal(err)
 		}
 		accessCode = token["FriezeAccessCode"].(string)
+		domainName := token["DomainName"].(string)
+
 		roomId, matAccessCode, prevBatchID, userId := dbGetAllDetails(accessCode, domainName)
 		result := apiGetMessages(matAccessCode, roomId, prevBatchID)
 		result["userId"] = userId
@@ -282,11 +284,12 @@ func retrieveToken(reqToken string) map[string]interface{} {
 }
 func SendMessage(w http.ResponseWriter, r *http.Request) {
 	reqToken := r.Header.Get("Authorization")
-	domainName := r.Host
 	var accessCode string
 	if len(reqToken) > 1 {
 		token := retrieveToken(reqToken)
 		accessCode = token["FriezeAccessCode"].(string)
+		domainName := token["DomainName"].(string)
+
 		body, readErr := ioutil.ReadAll(r.Body)
 		defer r.Body.Close()
 		if readErr != nil {
@@ -294,6 +297,7 @@ func SendMessage(w http.ResponseWriter, r *http.Request) {
 		}
 		var f map[string]string
 		json.Unmarshal([]byte(body), &f)
+
 		sendMessage(accessCode, domainName, f["message"])
 	} else {
 		log.Fatal("No Tockemmn")
