@@ -44,7 +44,7 @@ func UpgradeWS(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer conn.Close()
+
 	for {
 		var msg Message
 		err := conn.ReadJSON(&msg)

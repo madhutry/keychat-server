@@ -20,6 +20,14 @@ const matrixApiHost = "localhost:8008"
 func OpenChat(w http.ResponseWriter, r *http.Request) {
 	reqToken := r.Header.Get("Authorization")
 	newFriezeChatAccessCode := pborman.NewRandom().String()
+	var cookie, err = r.Cookie("DomainName")
+	domainNm := ""
+	if err == nil {
+		domainNm = cookie.Value
+		log.Println("get cookie value is " + domainNm + "")
+	} else {
+		log.Fatal("---No Domain Name Cookie Found")
+	}
 
 	var accessCode string
 	body, readErr := ioutil.ReadAll(r.Body)
@@ -33,11 +41,10 @@ func OpenChat(w http.ResponseWriter, r *http.Request) {
 	if len(reqToken) == 0 {
 		fullname := m["fullname"]
 		mobileno := m["mobileno"]
-		domainName := m["domainName"].(string)
 
 		regId := pborman.NewRandom().String()
-		registerMatrixChatUser(fullname.(string), mobileno.(string), newFriezeChatAccessCode, domainName, regId)
-		newJWTToken, _ := GenerateToken(newFriezeChatAccessCode, domainName)
+		registerMatrixChatUser(fullname.(string), mobileno.(string), newFriezeChatAccessCode, domainNm, regId)
+		newJWTToken, _ := GenerateToken(newFriezeChatAccessCode, domainNm)
 		tokenJson := Token{newJWTToken}
 
 		enc := json.NewEncoder(w)
