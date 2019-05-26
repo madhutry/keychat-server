@@ -43,8 +43,8 @@ func OpenChat(w http.ResponseWriter, r *http.Request) {
 		mobileno := m["mobileno"]
 
 		regId := pborman.NewRandom().String()
-		registerMatrixChatUser(fullname.(string), mobileno.(string), newFriezeChatAccessCode, domainNm, regId)
-		newJWTToken, _ := GenerateToken(newFriezeChatAccessCode, domainNm)
+		_, userId := registerMatrixChatUser(fullname.(string), mobileno.(string), newFriezeChatAccessCode, domainNm, regId)
+		newJWTToken, _ := GenerateTokenWithUserID(newFriezeChatAccessCode, domainNm, userId)
 		tokenJson := Token{newJWTToken}
 
 		enc := json.NewEncoder(w)
@@ -60,11 +60,11 @@ func OpenChat(w http.ResponseWriter, r *http.Request) {
 		}
 		accessCode = token["FriezeAccessCode"].(string)
 		domainName := token["DomainName"].(string)
-
+		userId := token["UserId"].(string)
 		matAccessCode, regId := getMatrixAccessCode(accessCode, domainName)
 		dbDeactivateOldAccessCode(accessCode, domainName)
 		dbInsertNewAccessCode(matAccessCode, newFriezeChatAccessCode, domainName, regId)
-		newJWTToken, _ := GenerateToken(newFriezeChatAccessCode, domainName)
+		newJWTToken, _ := GenerateTokenWithUserID(newFriezeChatAccessCode, domainNm, userId)
 		tokenJson := Token{newJWTToken}
 		enc := json.NewEncoder(w)
 		enc.Encode(&tokenJson)
@@ -189,7 +189,7 @@ func getMatrixAccessCode(friezeAccessCode string, domainName string) (string, st
 	return "", matAccCodeStr
 }
 func registerMatrixChatUser(fullname string, mobileno string,
-	friezeAccessCode string, domainName string, regId string) string {
+	friezeAccessCode string, domainName string, regId string) (string, string) {
 	jsonData := map[string]interface{}{
 		"auth": map[string]string{
 			"session": "ffdfdasfdsfadsf",
@@ -207,7 +207,7 @@ func registerMatrixChatUser(fullname string, mobileno string,
 	response, err := http.Post(endpoint, "application/json", bytes.NewBuffer(jsonValue))
 	if err != nil {
 		fmt.Printf("The HTTP request failed with error %s\n", err)
-		return ""
+		return "", ""
 	} else {
 		data, _ := ioutil.ReadAll(response.Body)
 		var f interface{}
@@ -230,7 +230,7 @@ func registerMatrixChatUser(fullname string, mobileno string,
 		startBatchId := result["startBatch"].(string)
 		dbInsertRegistration(fullname, mobileno, friezeAccessCode, regId, roomId, roomAlias, startBatchId, userId)
 		dbInsertNewAccessCode(matrixAccessCode, friezeAccessCode, domainName, regId)
-		return matrixAccessCode
+		return matrixAccessCode, userId
 	}
 }
 func apiCreateRoom(accessCode string) (string, string) {

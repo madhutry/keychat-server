@@ -64,13 +64,13 @@ var routes = Routes{
 		SendMessage,
 		true,
 	},
-	/* 	Route{
+	Route{
 		"ReceiveNotification",
 		strings.ToUpper("Post"),
-		"/_matrix/push/v1/notify",
+		"/chat/notify",
 		ReceiveNotification,
 		false,
-	}, */
+	},
 	Route{
 		"UpgradeWS",
 		strings.ToUpper("get"),

@@ -1,7 +1,9 @@
 package friezechat
 
 import (
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
 
@@ -20,7 +22,7 @@ type ReceivedMesg struct {
 }
 
 var broadcast = make(chan Message)
-var receiver = make(chan ReceivedMesg)
+var receiver = make(chan map[string]interface{})
 var clients = make(map[string]map[string]*websocket.Conn)
 
 var upgrader = websocket.Upgrader{
@@ -74,13 +76,30 @@ func HandleMessages() {
 		sendMessage(friezeAccessCode, domainName, mesg)
 	}
 }
-
-/* func HandleReceiveMessages() {
+func HandleReceiveMessages() {
 	for {
-		// grab next message from the broadcast channel
-		msg := <-receiver
-		for _, v := range clients[msg.RoomId] {
-			v.WriteJSON(msg)
+		m := <-receiver
+		//batchId := m["batchId"].(string)
+		messagesRecvd := m["messages"].(map[string]interface{})
+		for k, mesg := range messagesRecvd {
+			roomID := k
+			var messages [][]string
+			mesgArr := mesg.([]interface{})
+			for _, val := range mesgArr {
+				v := val.(map[string]interface{})
+				mesgStr := v["message"].(string)
+				ts := v["timestamp"].(string)
+				sender := v["sender"].(string)
+				mesg1 := []string{mesgStr, ts, sender}
+				messages = append(messages, mesg1)
+			}
+			for k, v := range clients[roomID] {
+				result := map[string]interface{}{
+					"messages": messages,
+					"userId":   k,
+				}
+				v.WriteJSON(result)
+			}
 		}
 	}
 }
@@ -90,41 +109,5 @@ func ReceiveNotification(w http.ResponseWriter, req *http.Request) {
 	json.Unmarshal([]byte(data), &f)
 
 	m := f.(map[string]interface{})
-	eventId := m["notification"].(map[string]interface{})["event_id"].(string)
-	roomId := m["notification"].(map[string]interface{})["room_id"].(string)
-	matAccessCode := dbGetNotifcationDetails(roomId)
-	mesgDetails := apiGetEventIdDetails(eventId, roomId, matAccessCode)
-	recevdMesg := ReceivedMesg{
-		MessageText: mesgDetails["message"].(string),
-		Sender:      mesgDetails["sender"].(string),
-		Timestamp:   mesgDetails["timestamp"].(string),
-		RoomId:      mesgDetails["roomId"].(string),
-	}
-	receiver <- recevdMesg
+	receiver <- m
 }
-
-func apiGetEventIdDetails(eventId string, roomId string, accessCode string) map[string]interface{} {
-	apiHost := "http://%s/_matrix/client/r0/rooms/%s/event/%s?access_token=%s"
-	endpoint := fmt.Sprintf(apiHost, roomId, eventId, accessCode)
-	fmt.Println(endpoint)
-	response, err := http.Get(endpoint)
-	if err != nil {
-		fmt.Printf("The HTTP request failed with error %s\n", err)
-		return nil
-	} else {
-		data, _ := ioutil.ReadAll(response.Body)
-		var f interface{}
-		json.Unmarshal([]byte(data), &f)
-		m := f.(map[string]interface{})
-		sender := m["sender"].(string)
-		timeRecvd := m["origin_server_ts"].(string)
-		mesg := m["content"].(map[string]interface{})["body"].(string)
-		result := map[string]interface{}{
-			"timestamp": timeRecvd,
-			"message":   mesg,
-			"sender":    sender,
-			"roomId":    roomId,
-		}
-		return result
-	}
-} */
