@@ -15,8 +15,6 @@ import (
 	pborman "github.com/pborman/uuid"
 )
 
-const matrixApiHost = "localhost:8008"
-
 func OpenChat(w http.ResponseWriter, r *http.Request) {
 	reqToken := r.Header.Get("Authorization")
 	newFriezeChatAccessCode := pborman.NewRandom().String()
@@ -202,7 +200,7 @@ func registerMatrixChatUser(fullname string, mobileno string,
 		"x_show_msisdn": false,
 	}
 	apiHost := "http://%s/_matrix/client/r0/register"
-	endpoint := fmt.Sprintf(apiHost, matrixApiHost)
+	endpoint := fmt.Sprintf(apiHost, GetMatrixServerUrl())
 	jsonValue, _ := json.Marshal(jsonData)
 	response, err := http.Post(endpoint, "application/json", bytes.NewBuffer(jsonValue))
 	if err != nil {
@@ -226,6 +224,7 @@ func registerMatrixChatUser(fullname string, mobileno string,
 		ownerAccessCode := dbGetDomainRelatedData(domainName)
 		log.Println("Added Token for Owner to room :" + strconv.Itoa(len(ownerAccessCode)))
 		apiJoinRoom(ownerAccessCode, roomId)
+		apiJoinRoom(GetMatrixAdminCode(), roomId)
 		result := apiGetMessages(matrixAccessCode, roomId, "")
 		startBatchId := result["startBatch"].(string)
 		dbInsertRegistration(fullname, mobileno, friezeAccessCode, regId, roomId, roomAlias, startBatchId, userId)
@@ -240,7 +239,7 @@ func apiCreateRoom(accessCode string) (string, string) {
 		"room_alias_name": roomAlias,
 	}
 	apiHost := "http://%s/_matrix/client/r0/createRoom?access_token=%s"
-	endpoint := fmt.Sprintf(apiHost, matrixApiHost, accessCode)
+	endpoint := fmt.Sprintf(apiHost, GetMatrixServerUrl(), accessCode)
 	jsonValue, _ := json.Marshal(jsonData)
 	response, err := http.Post(endpoint, "application/json", bytes.NewBuffer(jsonValue))
 	if err != nil {
@@ -321,7 +320,7 @@ func apiGetMessages(accessCode string, roomId string, previousBatch string) map[
 		fromPrevBatch = fmt.Sprintf("&from=%s", previousBatch)
 	}
 
-	endpoint := fmt.Sprintf(apiHost, matrixApiHost, roomId, accessCode, fromPrevBatch)
+	endpoint := fmt.Sprintf(apiHost, GetMatrixServerUrl(), roomId, accessCode, fromPrevBatch)
 	fmt.Println(endpoint)
 	response, err := http.Get(endpoint)
 	if err != nil {
@@ -361,7 +360,7 @@ func apiSendMessage(matAccessCode string, roomId string, message string) {
 		"body":    message,
 	}
 	apiHost := "http://%s/_matrix/client/r0/rooms/%s/send/m.room.message?access_token=%s"
-	endpoint := fmt.Sprintf(apiHost, matrixApiHost, roomId, matAccessCode)
+	endpoint := fmt.Sprintf(apiHost, GetMatrixServerUrl(), roomId, matAccessCode)
 	jsonValue, _ := json.Marshal(jsonData)
 	response, err := http.Post(endpoint, "application/json", bytes.NewBuffer(jsonValue))
 	if err != nil {
@@ -376,7 +375,7 @@ func apiSendMessage(matAccessCode string, roomId string, message string) {
 func apiJoinRoom(matAccCode string, roomId string) {
 	jsonData := map[string]string{}
 	apiHost := "http://%s/_matrix/client/r0/join/%s?access_token=%s"
-	endpoint := fmt.Sprintf(apiHost, matrixApiHost, roomId, matAccCode)
+	endpoint := fmt.Sprintf(apiHost, GetMatrixServerUrl(), roomId, matAccCode)
 	jsonValue, _ := json.Marshal(jsonData)
 	response, err := http.Post(endpoint, "application/json", bytes.NewBuffer(jsonValue))
 	if err != nil {

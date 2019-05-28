@@ -19,9 +19,11 @@ import (
 )
 
 func main() {
-	log.Printf("Server started")
+	log.Printf("Server startead")
 
 	router := sw.NewRouter()
+	sw.InitConfig()
+
 	go sw.HandleMessages()
 	go sw.HandleReceiveMessages()
 	sw.InitPostgres()
