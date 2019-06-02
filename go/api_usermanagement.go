@@ -99,6 +99,33 @@ func dbInsertRegistration(fullName string, mobile string,
 		panic(err)
 	}
 }
+func dbGetMessages(friezeAccCd string) [][]string {
+	selectMesg := `select message,sender,a.server_received_ts,a.mesg_id from messages a , chat_registration b, access_code_map c
+	where
+	a.room_id=b.room_id
+	and b.id=c.registration_id
+	and c.frieze_access_code=$1
+	and a.customer_read=0 
+	order by a.create_ts asc`
+	db := Envdb.db
+
+	rows, err := db.Query(selectMesg, friezeAccCd)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer rows.Close()
+	var messages [][]string
+	var messageTxt string
+	var sender string
+	var timestamp string
+	var msgid string
+	for rows.Next() {
+		rows.Scan(&messageTxt, &sender, &timestamp, &msgid)
+		mesg1 := []string{messageTxt, timestamp, sender, msgid}
+		messages = append(messages, mesg1)
+	}
+	return messages
+}
 func dbGetAllDetails(accessCode string, domainName string) (string, string, string, string) {
 	log.Println("dbGetAllDetails:" + accessCode + ":" + domainName)
 	matAccCode := `SELECT room_id,b.matrix_access_code,a.prev_batch_id,a.user_id
@@ -224,7 +251,8 @@ func registerMatrixChatUser(fullname string, mobileno string,
 		ownerAccessCode := dbGetDomainRelatedData(domainName)
 		log.Println("Added Token for Owner to room :" + strconv.Itoa(len(ownerAccessCode)))
 		apiJoinRoom(ownerAccessCode, roomId)
-		apiJoinRoom(GetMatrixAdminCode(), roomId)
+		accessCdAdmin := GetMatrixAdminCode()
+		apiJoinRoom(accessCdAdmin, roomId)
 		result := apiGetMessages(matrixAccessCode, roomId, "")
 		startBatchId := result["startBatch"].(string)
 		dbInsertRegistration(fullname, mobileno, friezeAccessCode, regId, roomId, roomAlias, startBatchId, userId)
@@ -258,6 +286,29 @@ func apiCreateRoom(accessCode string) (string, string) {
 
 }
 func GetMessages(w http.ResponseWriter, r *http.Request) {
+	reqToken := r.Header.Get("Authorization")
+	var accessCode string
+	if len(reqToken) > 0 {
+		splitToken := strings.Split(reqToken, "Bearer")
+		reqToken = splitToken[1]
+		token, err := VerifyToken(strings.TrimSpace(reqToken))
+		if err != nil {
+			log.Fatal(err)
+		}
+		accessCode = token["FriezeAccessCode"].(string)
+		domainName := token["DomainName"].(string)
+
+		_, _, _, userId := dbGetAllDetails(accessCode, domainName)
+		result := make(map[string]interface{})
+		result["messages"] = dbGetMessages(accessCode)
+		result["userId"] = userId
+		enc := json.NewEncoder(w) //
+		enc.Encode(result)
+	} else {
+		log.Fatal("No Tockemmn")
+	}
+}
+func GetMessages1(w http.ResponseWriter, r *http.Request) {
 	reqToken := r.Header.Get("Authorization")
 	var accessCode string
 	if len(reqToken) > 0 {
@@ -304,14 +355,14 @@ func SendMessage(w http.ResponseWriter, r *http.Request) {
 		var f map[string]string
 		json.Unmarshal([]byte(body), &f)
 
-		sendMessage(accessCode, domainName, f["message"])
+		sendMessage(accessCode, domainName, f["message"], f["uuid"])
 	} else {
 		log.Fatal("No Tockemmn")
 	}
 }
-func sendMessage(friezeAccessCode string, domainName string, message string) {
+func sendMessage(friezeAccessCode string, domainName string, message string, uuid string) {
 	roomId, matAccessCode, _, _ := dbGetAllDetails(friezeAccessCode, domainName)
-	apiSendMessage(matAccessCode, roomId, message)
+	apiSendMessage(matAccessCode, roomId, message, uuid)
 }
 func apiGetMessages(accessCode string, roomId string, previousBatch string) map[string]interface{} {
 	fromPrevBatch := ""
@@ -354,10 +405,11 @@ func apiGetMessages(accessCode string, roomId string, previousBatch string) map[
 	}
 }
 
-func apiSendMessage(matAccessCode string, roomId string, message string) {
+func apiSendMessage(matAccessCode string, roomId string, message string, uuid string) {
 	jsonData := map[string]string{
-		"msgtype": "m.text",
-		"body":    message,
+		"msgtype":  "m.text",
+		"body":     message,
+		"trans_id": uuid,
 	}
 	apiHost := "http://%s/_matrix/client/r0/rooms/%s/send/m.room.message?access_token=%s"
 	endpoint := fmt.Sprintf(apiHost, GetMatrixServerUrl(), roomId, matAccessCode)
@@ -376,6 +428,7 @@ func apiJoinRoom(matAccCode string, roomId string) {
 	jsonData := map[string]string{}
 	apiHost := "http://%s/_matrix/client/r0/join/%s?access_token=%s"
 	endpoint := fmt.Sprintf(apiHost, GetMatrixServerUrl(), roomId, matAccCode)
+	fmt.Println(endpoint + "---")
 	jsonValue, _ := json.Marshal(jsonData)
 	response, err := http.Post(endpoint, "application/json", bytes.NewBuffer(jsonValue))
 	if err != nil {
@@ -385,5 +438,6 @@ func apiJoinRoom(matAccCode string, roomId string) {
 		data, _ := ioutil.ReadAll(response.Body)
 		var f interface{}
 		json.Unmarshal([]byte(data), &f)
+		fmt.Println("lsl")
 	}
 }

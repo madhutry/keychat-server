@@ -11,8 +11,11 @@ import (
 )
 
 type Message struct {
+	MesgType    string `json:"mesgType"`
 	MessageText string `json:"message"`
 	Token       string `json:"token"`
+	Sock        *websocket.Conn
+	Uuid        string `json:"uuid"`
 }
 type ReceivedMesg struct {
 	MessageText string `json:"message"`
@@ -22,6 +25,7 @@ type ReceivedMesg struct {
 }
 
 var broadcast = make(chan Message)
+
 var receiver = make(chan map[string]interface{})
 var clients = make(map[string]map[string]*websocket.Conn)
 
@@ -50,6 +54,7 @@ func UpgradeWS(w http.ResponseWriter, r *http.Request) {
 	for {
 		var msg Message
 		err := conn.ReadJSON(&msg)
+		msg.Sock = conn
 		if err != nil {
 			log.Println(err)
 			return
@@ -68,12 +73,24 @@ func HandleMessages() {
 	for {
 		// grab next message from the broadcast channel
 		msg := <-broadcast
+		mesgType := msg.MesgType
 		mesg := msg.MessageText
 		auth := msg.Token
+		sock := msg.Sock
+		uuid := msg.Uuid
 		token := retrieveToken(fmt.Sprintf("Bearer %s", auth))
 		friezeAccessCode := token["FriezeAccessCode"].(string)
 		domainName := token["DomainName"].(string)
-		sendMessage(friezeAccessCode, domainName, mesg)
+		userId := token["UserId"].(string)
+
+		if mesgType == "sendmesg" {
+			sendMessage(friezeAccessCode, domainName, mesg, uuid)
+		} else if mesgType == "ping" {
+			result := make(map[string]interface{})
+			result["messages"] = dbGetMessages(friezeAccessCode)
+			result["userId"] = userId
+			sock.WriteJSON(result)
+		}
 	}
 }
 func HandleReceiveMessages() {
@@ -90,11 +107,13 @@ func HandleReceiveMessages() {
 				mesgStr := v["message"].(string)
 				ts := v["timestamp"].(string)
 				sender := v["sender"].(string)
-				mesg1 := []string{mesgStr, ts, sender}
+				transid := v["transid"].(string)
+				mesg1 := []string{mesgStr, ts, sender, transid}
 				messages = append(messages, mesg1)
 			}
 			for k, v := range clients[roomID] {
 				result := map[string]interface{}{
+					"msgType":  "message",
 					"messages": messages,
 					"userId":   k,
 				}
