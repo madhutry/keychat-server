@@ -34,3 +34,6 @@ func GetFriezeChatAPIUrl() string {
 func GetMatrixAdminCode() string {
 	return viper.GetString("MATRIX_ADMIN_ACCESS_CODE")
 }
+func GetMatrixAdminUserid() string {
+	return viper.GetString("MATRIX_ADMIN_USERID")
+}

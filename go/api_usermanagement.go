@@ -8,7 +8,6 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -41,9 +40,9 @@ func OpenChat(w http.ResponseWriter, r *http.Request) {
 		mobileno := m["mobileno"]
 
 		regId := pborman.NewRandom().String()
-		_, userId := registerMatrixChatUser(fullname.(string), mobileno.(string), newFriezeChatAccessCode, domainNm, regId)
-		newJWTToken, _ := GenerateTokenWithUserID(newFriezeChatAccessCode, domainNm, userId)
-		tokenJson := Token{newJWTToken}
+		_, userId, avatarUrl, welcomeMsg := registerMatrixChatUser(fullname.(string), mobileno.(string), newFriezeChatAccessCode, domainNm, regId)
+		newJWTToken, _ := GenerateTokenWithUserID(newFriezeChatAccessCode, domainNm, userId, fullname.(string))
+		tokenJson := Token{newJWTToken, avatarUrl, welcomeMsg}
 
 		enc := json.NewEncoder(w)
 		enc.Encode(&tokenJson)
@@ -58,15 +57,44 @@ func OpenChat(w http.ResponseWriter, r *http.Request) {
 		}
 		accessCode = token["FriezeAccessCode"].(string)
 		domainName := token["DomainName"].(string)
+		fullName := token["Fullname"].(string)
 		userId := token["UserId"].(string)
 		matAccessCode, regId := getMatrixAccessCode(accessCode, domainName)
 		dbDeactivateOldAccessCode(accessCode, domainName)
 		dbInsertNewAccessCode(matAccessCode, newFriezeChatAccessCode, domainName, regId)
-		newJWTToken, _ := GenerateTokenWithUserID(newFriezeChatAccessCode, domainNm, userId)
-		tokenJson := Token{newJWTToken}
+		newJWTToken, _ := GenerateTokenWithUserID(newFriezeChatAccessCode, domainNm, userId, fullName)
+		tokenJson := Token{newJWTToken, "", ""}
 		enc := json.NewEncoder(w)
 		enc.Encode(&tokenJson)
 	}
+}
+func checkOwnerOnline(domainName string) map[string]interface{} {
+	apiHost := "http://%s/_matrix/client/r0/presence/%s/status?access_token=%s"
+	agentsDetails, displayNames := dbGetAgents(domainName)
+	prsent := "offline"
+	timeactive := float64(0)
+	displayName := ""
+	for i, v := range agentsDetails {
+		endpoint := fmt.Sprintf(apiHost, GetMatrixServerUrl(), v, GetMatrixAdminCode())
+		response, err := http.Get(endpoint)
+		if err != nil {
+			fmt.Printf("GetOnlineStatus The HTTP request failed with error %s\n", err)
+			log.Fatal(err)
+		} else {
+			data, _ := ioutil.ReadAll(response.Body)
+			var f interface{}
+			json.Unmarshal([]byte(data), &f)
+			m := f.(map[string]interface{})
+			prsent = m["presence"].(string)
+			timeactive = m["last_active_ago"].(float64)
+			displayName = displayNames[i]
+			if prsent == "online" {
+				break
+			}
+		}
+	}
+	result := map[string]interface{}{"msgType": "checkOnline", "online": prsent, "activetime": timeactive, "displayName": displayName}
+	return result
 }
 func dbDeactivateOldAccessCode(friezeChatAccessCode string, domainName string) {
 	deactivateAccCode := `UPDATE access_code_map SET active = 0 WHERE frieze_access_code = $1 AND
@@ -100,13 +128,23 @@ func dbInsertRegistration(fullName string, mobile string,
 	}
 }
 func dbGetMessages(friezeAccCd string) [][]string {
-	selectMesg := `select message,sender,a.server_received_ts,a.mesg_id from messages a , chat_registration b, access_code_map c
+	/* 	selectMesg := `select message,sender,a.server_received_ts,a.mesg_id from messages a , chat_registration b, access_code_map c
+	   	where
+	   	a.room_id=b.room_id
+	   	and b.id=c.registration_id
+	   	and c.frieze_access_code=$1
+	   	and a.customer_read=0
+	   	order by a.create_ts asc` */
+
+	selectMesg := `select message,COALESCE(d.display_name, sender),a.server_received_ts,a.mesg_id from  chat_registration b, access_code_map c,messages a  LEFT OUTER JOIN agents d
+ 	ON d.userid=sender
 	where
 	a.room_id=b.room_id
 	and b.id=c.registration_id
 	and c.frieze_access_code=$1
 	and a.customer_read=0 
-	order by a.create_ts asc`
+	order by a.create_ts asc;
+	`
 	db := Envdb.db
 
 	rows, err := db.Query(selectMesg, friezeAccCd)
@@ -164,23 +202,79 @@ func dbGetNotifcationDetails(roomId string) string {
 	matAccCodeStmt.QueryRow(roomId).Scan(&matAccessCode)
 	return matAccessCode
 }
+func dbGetAgents(domainName string) ([]string, []string) {
 
-func dbGetDomainRelatedData(domainName string) string {
-
-	matAccCode := `SELECT 
-	matrix_access_code
+	userIdsSql := `SELECT 
+	userid,display_name
 	FROM mat_acc_cd_owner
 	WHERE domain_name=$1
+	UNION
+	SELECT 
+	b.userid,b.display_name
+	FROM mat_acc_cd_owner a, agents b
+	WHERE domain_name=$2
+	and a.id=b.main_owner_id`
+
+	db := Envdb.db
+
+	userIdsStmt, err := db.Prepare(userIdsSql)
+	if err != nil {
+		log.Fatal(err)
+	}
+	rows, err := userIdsStmt.Query(domainName, domainName)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer rows.Close()
+	var userIds []string
+	var displayNames []string
+
+	for rows.Next() {
+		var userId string
+		var displayName string
+		rows.Scan(&userId, &displayName)
+		userIds = append(userIds, userId)
+		displayNames = append(displayNames, displayName)
+	}
+	return userIds, displayNames
+}
+func dbGetDomainRelatedData(domainName string) ([]string, [][]string) {
+
+	matAccCode := `SELECT 
+	1,matrix_access_code,avatar_img_url,display_name
+	FROM mat_acc_cd_owner
+	WHERE domain_name=$1
+UNION
+SELECT 
+	2,b.matrix_access_code,b.avatar_img_url,b.display_name
+	FROM mat_acc_cd_owner a, agents b
+	WHERE domain_name=$2
+	and a.id=b.main_owner_id order by 1
 `
-	var matAccessCode string
 	db := Envdb.db
 
 	matAccCodeStmt, err := db.Prepare(matAccCode)
 	if err != nil {
 		log.Fatal(err)
 	}
-	matAccCodeStmt.QueryRow(domainName).Scan(&matAccessCode)
-	return matAccessCode
+	rows, err := matAccCodeStmt.Query(domainName, domainName)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer rows.Close()
+	var codes []string
+	var statusInfo [][]string
+	for rows.Next() {
+		var order int16
+		var accCd string
+		var avatarUrl string
+		var welcomeMsg string
+		rows.Scan(&order, &accCd, &avatarUrl, &welcomeMsg)
+		result := []string{avatarUrl, welcomeMsg}
+		codes = append(codes, accCd)
+		statusInfo = append(statusInfo, result)
+	}
+	return codes, statusInfo
 }
 func dbInsertNewAccessCode(matrixAccessCode string, friezeChatAccessCode string, domainName string, regId string) {
 	addAccessCodeMap := `INSERT INTO access_code_map 
@@ -214,13 +308,14 @@ func getMatrixAccessCode(friezeAccessCode string, domainName string) (string, st
 	return "", matAccCodeStr
 }
 func registerMatrixChatUser(fullname string, mobileno string,
-	friezeAccessCode string, domainName string, regId string) (string, string) {
+	friezeAccessCode string, domainName string, regId string) (string, string, string, string) {
+	username := friezeAccessCode[:5]
 	jsonData := map[string]interface{}{
 		"auth": map[string]string{
 			"session": "ffdfdasfdsfadsf",
 			"type":    "m.login.dummy",
 		},
-		"username":      friezeAccessCode[:5],
+		"username":      username,
 		"password":      "palava123",
 		"bind_email":    false,
 		"bind_msisdn":   false,
@@ -232,7 +327,7 @@ func registerMatrixChatUser(fullname string, mobileno string,
 	response, err := http.Post(endpoint, "application/json", bytes.NewBuffer(jsonValue))
 	if err != nil {
 		fmt.Printf("The HTTP request failed with error %s\n", err)
-		return "", ""
+		return "", "", "", ""
 	} else {
 		data, _ := ioutil.ReadAll(response.Body)
 		var f interface{}
@@ -246,25 +341,58 @@ func registerMatrixChatUser(fullname string, mobileno string,
 			panic(err)
 		}
 		err = db.Ping()
-		roomId, roomAlias := apiCreateRoom(matrixAccessCode)
+		apiPutDisplayName(matrixAccessCode, userId, fullname)
+		roomId, roomAlias := apiCreateRoom(matrixAccessCode, fullname, username, mobileno)
 		log.Println("Adding Owner to room :" + domainName)
-		ownerAccessCode := dbGetDomainRelatedData(domainName)
-		log.Println("Added Token for Owner to room :" + strconv.Itoa(len(ownerAccessCode)))
-		apiJoinRoom(ownerAccessCode, roomId)
+		ownerDetails, profileInfo := dbGetDomainRelatedData(domainName)
 		accessCdAdmin := GetMatrixAdminCode()
-		apiJoinRoom(accessCdAdmin, roomId)
+		accessCodes := append(ownerDetails, accessCdAdmin)
+		apiJoinRoom(accessCodes, roomId)
 		result := apiGetMessages(matrixAccessCode, roomId, "")
 		startBatchId := result["startBatch"].(string)
 		dbInsertRegistration(fullname, mobileno, friezeAccessCode, regId, roomId, roomAlias, startBatchId, userId)
 		dbInsertNewAccessCode(matrixAccessCode, friezeAccessCode, domainName, regId)
-		return matrixAccessCode, userId
+		return matrixAccessCode, userId, profileInfo[0][0], profileInfo[0][1]
 	}
 }
-func apiCreateRoom(accessCode string) (string, string) {
-	roomAlias := pborman.NewRandom().String()
+
+func apiPutDisplayName(accessCode string, userId string, fullname string) {
+	jsonData := map[string]string{
+		"displayname": fullname,
+	}
+	apiHost := "http://%s/_matrix/client/r0/profile/%s/displayname?access_token=%s"
+	endpoint := fmt.Sprintf(apiHost, GetMatrixServerUrl(), userId, accessCode)
+	jsonValue, _ := json.Marshal(jsonData)
+	client := &http.Client{}
+
+	request, err := http.NewRequest("PUT", endpoint, bytes.NewBuffer(jsonValue))
+	request.Header.Add("Content-type", "application/json")
+	_, err = client.Do(request)
+	/*
+		jsonValue, _ := json.Marshal(jsonData)
+		response, err := http.P(endpoint, "application/json", bytes.NewBuffer(jsonValue))
+	*/if err != nil {
+		fmt.Printf("The HTTP request failed with error %s\n", err)
+	}
+}
+func apiGetDisplayName(accessCode string, userId string, fullname string) {
+	apiHost := "http://%s/_matrix/client/r0/profile/%s/displayname?access_token=%s"
+	endpoint := fmt.Sprintf(apiHost, userId, accessCode)
+	client := &http.Client{}
+
+	request, err := http.NewRequest("GET", endpoint, nil)
+	request.Header.Add("Content-type", "application/json")
+	_, err = client.Do(request)
+	if err != nil {
+		fmt.Printf("The HTTP request failed with error %s\n", err)
+	}
+}
+func apiCreateRoom(accessCode string, fullname string, userid string, mobileno string) (string, string) {
+	roomAlias := fmt.Sprintf("%s-%s", fullname, userid)
 
 	jsonData := map[string]string{
 		"room_alias_name": roomAlias,
+		"topic":           fmt.Sprintf("Name:%s,Mobile:%s", fullname, mobileno),
 	}
 	apiHost := "http://%s/_matrix/client/r0/createRoom?access_token=%s"
 	endpoint := fmt.Sprintf(apiHost, GetMatrixServerUrl(), accessCode)
@@ -424,20 +552,23 @@ func apiSendMessage(matAccessCode string, roomId string, message string, uuid st
 		json.Unmarshal([]byte(data), &f)
 	}
 }
-func apiJoinRoom(matAccCode string, roomId string) {
-	jsonData := map[string]string{}
-	apiHost := "http://%s/_matrix/client/r0/join/%s?access_token=%s"
-	endpoint := fmt.Sprintf(apiHost, GetMatrixServerUrl(), roomId, matAccCode)
-	fmt.Println(endpoint + "---")
-	jsonValue, _ := json.Marshal(jsonData)
-	response, err := http.Post(endpoint, "application/json", bytes.NewBuffer(jsonValue))
-	if err != nil {
-		fmt.Printf("The HTTP request failed with error %s\n", err)
-		return
-	} else {
-		data, _ := ioutil.ReadAll(response.Body)
-		var f interface{}
-		json.Unmarshal([]byte(data), &f)
-		fmt.Println("lsl")
+
+func apiJoinRoom(matAccCode []string, roomId string) {
+	for _, codes := range matAccCode {
+		jsonData := map[string]string{}
+		apiHost := "http://%s/_matrix/client/r0/join/%s?access_token=%s"
+		endpoint := fmt.Sprintf(apiHost, GetMatrixServerUrl(), roomId, codes)
+		fmt.Println(endpoint + "---")
+		jsonValue, _ := json.Marshal(jsonData)
+		response, err := http.Post(endpoint, "application/json", bytes.NewBuffer(jsonValue))
+		if err != nil {
+			fmt.Printf("The HTTP request failed with error %s\n", err)
+			return
+		} else {
+			data, _ := ioutil.ReadAll(response.Body)
+			var f interface{}
+			json.Unmarshal([]byte(data), &f)
+			fmt.Println("lsl")
+		}
 	}
 }

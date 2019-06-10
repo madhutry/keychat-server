@@ -7,21 +7,23 @@ import (
 	jwt "github.com/dgrijalva/jwt-go"
 )
 
-func GenerateTokenWithUserID(friezeAccessCode string, domainName string, userId string) (string, error) {
+func GenerateTokenWithUserID(friezeAccessCode string, domainName string, userId string, fullname string) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"FriezeAccessCode": friezeAccessCode,
 		"DomainName":       domainName,
 		"nbf":              time.Now(),
 		"UserId":           userId,
+		"Fullname":         fullname,
 	})
 	tokenString, err := token.SignedString([]byte("secret"))
 	return tokenString, err
 }
-func GenerateToken(friezeAccessCode string, domainName string) (string, error) {
+func GenerateToken(friezeAccessCode string, domainName string, fullname string) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"FriezeAccessCode": friezeAccessCode,
 		"DomainName":       domainName,
 		"nbf":              time.Now(),
+		"Fullname":         fullname,
 	})
 	tokenString, err := token.SignedString([]byte("secret"))
 	return tokenString, err

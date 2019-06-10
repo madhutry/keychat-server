@@ -90,6 +90,9 @@ func HandleMessages() {
 			result["messages"] = dbGetMessages(friezeAccessCode)
 			result["userId"] = userId
 			sock.WriteJSON(result)
+		} else if mesgType == "checkagentonline" {
+			result := checkOwnerOnline(domainName)
+			sock.WriteJSON(result)
 		}
 	}
 }
