@@ -14,19 +14,10 @@ import (
 	pborman "github.com/pborman/uuid"
 )
 
-func OpenChat(w http.ResponseWriter, r *http.Request) {
+func SubmitChat(w http.ResponseWriter, r *http.Request) {
 	reqToken := r.Header.Get("Authorization")
 	newFriezeChatAccessCode := pborman.NewRandom().String()
-	var cookie, err = r.Cookie("DomainName")
-	domainNm := ""
-	if err == nil {
-		domainNm = cookie.Value
-		log.Println("get cookie value is " + domainNm + "")
-	} else {
-		log.Fatal("---No Domain Name Cookie Found")
-	}
 
-	var accessCode string
 	body, readErr := ioutil.ReadAll(r.Body)
 	defer r.Body.Close()
 	if readErr != nil {
@@ -38,9 +29,53 @@ func OpenChat(w http.ResponseWriter, r *http.Request) {
 	if len(reqToken) == 0 {
 		fullname := m["fullname"]
 		mobileno := m["mobileno"]
+		extraInfo := m["extrainfo"]
+		reqToken := m["token"]
+		token, err := VerifyToken(strings.TrimSpace(reqToken.(string)))
+		if err != nil {
+			fmt.Println("Could not verify token")
+			log.Fatal(err)
+		}
+		domainNm := token["DomainName"].(string)
+		regId := pborman.NewRandom().String()
+		_, userId, avatarUrl, welcomeMsg := registerMatrixChatUser(fullname.(string), mobileno.(string), extraInfo, newFriezeChatAccessCode, domainNm, regId)
+		newJWTToken, _ := GenerateTokenWithUserID(newFriezeChatAccessCode, domainNm, userId, fullname.(string))
+		tokenJson := Token{newJWTToken, avatarUrl, welcomeMsg}
+
+		enc := json.NewEncoder(w)
+		enc.Encode(&tokenJson)
+		w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+		w.WriteHeader(http.StatusOK)
+	}
+}
+func OpenChat(w http.ResponseWriter, r *http.Request) {
+	reqToken := r.Header.Get("Authorization")
+	newFriezeChatAccessCode := pborman.NewRandom().String()
+	//var cookie, err = r.Cookie("DomainName")
+	domainNm := "goodtm"
+	/* 	if err == nil {
+	   		domainNm = cookie.Value
+	   		log.Println("get cookie value is " + domainNm + "")
+	   	} else {
+	   		log.Fatal("---No Domain Name Cookie Found")
+	   	}
+	*/
+	var accessCode string
+	body, readErr := ioutil.ReadAll(r.Body)
+	defer r.Body.Close()
+	if readErr != nil {
+		log.Fatal(readErr)
+	}
+	var f interface{}
+	json.Unmarshal([]byte(body), &f)
+
+	m := f.(map[string]interface{})
+	if len(reqToken) == 0 {
+		fullname := m["fullname"]
+		mobileno := m["mobileno"]
 
 		regId := pborman.NewRandom().String()
-		_, userId, avatarUrl, welcomeMsg := registerMatrixChatUser(fullname.(string), mobileno.(string), newFriezeChatAccessCode, domainNm, regId)
+		_, userId, avatarUrl, welcomeMsg := registerMatrixChatUser(fullname.(string), mobileno.(string), nil, newFriezeChatAccessCode, domainNm, regId)
 		newJWTToken, _ := GenerateTokenWithUserID(newFriezeChatAccessCode, domainNm, userId, fullname.(string))
 		tokenJson := Token{newJWTToken, avatarUrl, welcomeMsg}
 
@@ -110,6 +145,23 @@ func dbDeactivateOldAccessCode(friezeChatAccessCode string, domainName string) {
 		panic(err)
 	}
 }
+func dbInsertRegistrationExtra(fullName string, mobile string, extra interface{},
+	friezeAccessCode string, regId string, roomId string, roomAlias string, prevBatchId string, userId string) {
+
+	insertRegister := `INSERT INTO chat_registration (id,full_name,mobile,create_dt,room_id,room_alias,prev_batch_id,user_id)
+  VALUES ($1,$2,$3,$4,$5,$6,$7,$8);`
+	db := Envdb.db
+
+	insertRegisterStmt, err := db.Prepare(insertRegister)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer insertRegisterStmt.Close()
+	_, err = insertRegisterStmt.Exec(regId, fullName, mobile, time.Now(), roomId, roomAlias, prevBatchId, userId)
+	if err != nil {
+		panic(err)
+	}
+}
 func dbInsertRegistration(fullName string, mobile string,
 	friezeAccessCode string, regId string, roomId string, roomAlias string, prevBatchId string, userId string) {
 
@@ -127,7 +179,7 @@ func dbInsertRegistration(fullName string, mobile string,
 		panic(err)
 	}
 }
-func dbGetMessages(friezeAccCd string) [][]string {
+func dbGetMessages(friezeAccCd string) ([][]string, int16) {
 	/* 	selectMesg := `select message,sender,a.server_received_ts,a.mesg_id from messages a , chat_registration b, access_code_map c
 	   	where
 	   	a.room_id=b.room_id
@@ -136,7 +188,7 @@ func dbGetMessages(friezeAccCd string) [][]string {
 	   	and a.customer_read=0
 	   	order by a.create_ts asc` */
 
-	selectMesg := `select message,COALESCE(d.display_name, sender),a.server_received_ts,a.mesg_id from  chat_registration b, access_code_map c,messages a  LEFT OUTER JOIN agents d
+	selectMesg := `select a.id,message,COALESCE(d.display_name, sender),a.server_received_ts,a.mesg_id from  chat_registration b, access_code_map c,messages a  LEFT OUTER JOIN agents d
  	ON d.userid=sender
 	where
 	a.room_id=b.room_id
@@ -157,12 +209,13 @@ func dbGetMessages(friezeAccCd string) [][]string {
 	var sender string
 	var timestamp string
 	var msgid string
+	var msgSerialId int16
 	for rows.Next() {
-		rows.Scan(&messageTxt, &sender, &timestamp, &msgid)
+		rows.Scan(&msgSerialId, &messageTxt, &sender, &timestamp, &msgid)
 		mesg1 := []string{messageTxt, timestamp, sender, msgid}
 		messages = append(messages, mesg1)
 	}
-	return messages
+	return messages, msgSerialId
 }
 func dbGetAllDetails(accessCode string, domainName string) (string, string, string, string) {
 	log.Println("dbGetAllDetails:" + accessCode + ":" + domainName)
@@ -307,7 +360,7 @@ func getMatrixAccessCode(friezeAccessCode string, domainName string) (string, st
 	matAccCodeStmt.QueryRow(friezeAccessCode, domainName).Scan(&matAccCodeStr, &regId)
 	return "", matAccCodeStr
 }
-func registerMatrixChatUser(fullname string, mobileno string,
+func registerMatrixChatUser(fullname string, mobileno string, extraInfo interface{},
 	friezeAccessCode string, domainName string, regId string) (string, string, string, string) {
 	username := friezeAccessCode[:5]
 	jsonData := map[string]interface{}{
@@ -350,7 +403,11 @@ func registerMatrixChatUser(fullname string, mobileno string,
 		apiJoinRoom(accessCodes, roomId)
 		result := apiGetMessages(matrixAccessCode, roomId, "")
 		startBatchId := result["startBatch"].(string)
-		dbInsertRegistration(fullname, mobileno, friezeAccessCode, regId, roomId, roomAlias, startBatchId, userId)
+		if extraInfo == nil {
+			dbInsertRegistration(fullname, mobileno, friezeAccessCode, regId, roomId, roomAlias, startBatchId, userId)
+		} else {
+			dbInsertRegistrationExtra(fullname, mobileno, extraInfo, friezeAccessCode, regId, roomId, roomAlias, startBatchId, userId)
+		}
 		dbInsertNewAccessCode(matrixAccessCode, friezeAccessCode, domainName, regId)
 		return matrixAccessCode, userId, profileInfo[0][0], profileInfo[0][1]
 	}
@@ -428,7 +485,7 @@ func GetMessages(w http.ResponseWriter, r *http.Request) {
 
 		_, _, _, userId := dbGetAllDetails(accessCode, domainName)
 		result := make(map[string]interface{})
-		result["messages"] = dbGetMessages(accessCode)
+		result["messages"], _ = dbGetMessages(accessCode)
 		result["userId"] = userId
 		enc := json.NewEncoder(w) //
 		enc.Encode(result)

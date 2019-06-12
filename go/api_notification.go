@@ -87,7 +87,7 @@ func HandleMessages() {
 			sendMessage(friezeAccessCode, domainName, mesg, uuid)
 		} else if mesgType == "ping" {
 			result := make(map[string]interface{})
-			result["messages"] = dbGetMessages(friezeAccessCode)
+			result["messages"], result["lastSerialId"] = dbGetMessages(friezeAccessCode)
 			result["userId"] = userId
 			sock.WriteJSON(result)
 		} else if mesgType == "checkagentonline" {
