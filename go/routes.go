@@ -83,19 +83,13 @@ var routes = Routes{
 		strings.ToUpper("get"),
 		"/ws",
 		UpgradeWS,
-		true,
+		false,
 	},
 }
 
 func authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		reqToken := r.Header.Get("Authorization")
-		if len(reqToken) == 0 {
-			cookie, _ := r.Cookie("X-Authorization")
-			if cookie != nil {
-				reqToken = cookie.Value
-			}
-		}
 		splitToken := strings.Split(reqToken, "Bearer")
 		reqToken = splitToken[1]
 		token, err := VerifyToken(strings.TrimSpace(reqToken))

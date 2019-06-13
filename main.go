@@ -23,7 +23,6 @@ func main() {
 	router := sw.NewRouter()
 	sw.InitConfig()
 	go sw.HandleMessages()
-	go sw.HandleReceiveMessages()
 	sw.InitPostgres()
 	log.Printf("Server startead")
 	log.Fatal(http.ListenAndServe(":6060", router))
