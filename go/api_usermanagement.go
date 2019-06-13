@@ -51,15 +51,15 @@ func SubmitChat(w http.ResponseWriter, r *http.Request) {
 func OpenChat(w http.ResponseWriter, r *http.Request) {
 	reqToken := r.Header.Get("Authorization")
 	newFriezeChatAccessCode := pborman.NewRandom().String()
-	//var cookie, err = r.Cookie("DomainName")
+	var cookie, err = r.Cookie("DomainName")
 	domainNm := "goodtm"
-	/* 	if err == nil {
-	   		domainNm = cookie.Value
-	   		log.Println("get cookie value is " + domainNm + "")
-	   	} else {
-	   		log.Fatal("---No Domain Name Cookie Found")
-	   	}
-	*/
+	if err == nil {
+		domainNm = cookie.Value
+		log.Println("get cookie value is " + domainNm + "")
+	} else {
+		log.Fatal("---No Domain Name Cookie Found")
+	}
+
 	var accessCode string
 	body, readErr := ioutil.ReadAll(r.Body)
 	defer r.Body.Close()
