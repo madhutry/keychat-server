@@ -57,13 +57,13 @@ var routes = Routes{
 		SubmitChat,
 		false,
 	},
-	Route{
+	/* Route{
 		"GetMessages",
 		strings.ToUpper("get"),
 		"/chat/messages",
 		GetMessages,
 		true,
-	},
+	}, */
 	Route{
 		"SendMessage",
 		strings.ToUpper("Post"),

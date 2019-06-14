@@ -11,11 +11,12 @@ import (
 )
 
 type Message struct {
-	MesgType    string `json:"mesgType"`
-	MessageText string `json:"message"`
-	Token       string `json:"token"`
-	Sock        *websocket.Conn
-	Uuid        string `json:"uuid"`
+	MesgType     string `json:"mesgType"`
+	MessageText  string `json:"message"`
+	Token        string `json:"token"`
+	Sock         *websocket.Conn
+	Uuid         string `json:"uuid"`
+	LastSerialNo uint64 `json:lastSerialNo`
 }
 type ReceivedMesg struct {
 	MessageText string `json:"message"`
@@ -68,8 +69,9 @@ func HandleMessages() {
 		if mesgType == "sendmesg" {
 			sendMessage(friezeAccessCode, domainName, mesg, uuid)
 		} else if mesgType == "ping" {
+			lastSerialNo := msg.LastSerialNo
 			result := make(map[string]interface{})
-			result["messages"], result["lastSerialId"] = dbGetMessages(friezeAccessCode)
+			result["messages"], result["lastSerialId"] = dbGetMessages(friezeAccessCode, lastSerialNo)
 			result["userId"] = userId
 			sock.WriteJSON(result)
 		} else if mesgType == "checkagentonline" {

@@ -52,7 +52,7 @@ func OpenChat(w http.ResponseWriter, r *http.Request) {
 	reqToken := r.Header.Get("Authorization")
 	newFriezeChatAccessCode := pborman.NewRandom().String()
 	var cookie, err = r.Cookie("DomainName")
-	domainNm := "goodtm"
+	domainNm := ""
 	if err == nil {
 		domainNm = cookie.Value
 		log.Println("get cookie value is " + domainNm + "")
@@ -148,8 +148,8 @@ func dbDeactivateOldAccessCode(friezeChatAccessCode string, domainName string) {
 func dbInsertRegistrationExtra(fullName string, mobile string, extra interface{},
 	friezeAccessCode string, regId string, roomId string, roomAlias string, prevBatchId string, userId string) {
 
-	insertRegister := `INSERT INTO chat_registration (id,full_name,mobile,create_dt,room_id,room_alias,prev_batch_id,user_id)
-  VALUES ($1,$2,$3,$4,$5,$6,$7,$8);`
+	insertRegister := `INSERT INTO chat_registration (id,full_name,mobile,create_dt,room_id,room_alias,prev_batch_id,user_id,info)
+  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9);`
 	db := Envdb.db
 
 	insertRegisterStmt, err := db.Prepare(insertRegister)
@@ -157,7 +157,14 @@ func dbInsertRegistrationExtra(fullName string, mobile string, extra interface{}
 		log.Fatal(err)
 	}
 	defer insertRegisterStmt.Close()
-	_, err = insertRegisterStmt.Exec(regId, fullName, mobile, time.Now(), roomId, roomAlias, prevBatchId, userId)
+	delete(extra.(map[string]interface{}), "token")
+	extraInfoStr, err := json.Marshal(extra)
+	if err != nil {
+		fmt.Println("Problem Converting Extr to string")
+		log.Fatal(err)
+	}
+
+	_, err = insertRegisterStmt.Exec(regId, fullName, mobile, time.Now(), roomId, roomAlias, prevBatchId, userId, string(extraInfoStr))
 	if err != nil {
 		panic(err)
 	}
@@ -179,7 +186,7 @@ func dbInsertRegistration(fullName string, mobile string,
 		panic(err)
 	}
 }
-func dbGetMessages(friezeAccCd string) ([][]string, int16) {
+func dbGetMessages(friezeAccCd string, lastSince uint64) ([][]string, uint64) {
 	/* 	selectMesg := `select message,sender,a.server_received_ts,a.mesg_id from messages a , chat_registration b, access_code_map c
 	   	where
 	   	a.room_id=b.room_id
@@ -195,11 +202,12 @@ func dbGetMessages(friezeAccCd string) ([][]string, int16) {
 	and b.id=c.registration_id
 	and c.frieze_access_code=$1
 	and a.customer_read=0 
+	and a.id>$2
 	order by a.create_ts asc;
 	`
 	db := Envdb.db
 
-	rows, err := db.Query(selectMesg, friezeAccCd)
+	rows, err := db.Query(selectMesg, friezeAccCd, lastSince)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -209,7 +217,7 @@ func dbGetMessages(friezeAccCd string) ([][]string, int16) {
 	var sender string
 	var timestamp string
 	var msgid string
-	var msgSerialId int16
+	var msgSerialId uint64
 	for rows.Next() {
 		rows.Scan(&msgSerialId, &messageTxt, &sender, &timestamp, &msgid)
 		mesg1 := []string{messageTxt, timestamp, sender, msgid}
@@ -470,8 +478,13 @@ func apiCreateRoom(accessCode string, fullname string, userid string, mobileno s
 	}
 
 }
-func GetMessages(w http.ResponseWriter, r *http.Request) {
+
+/* func GetMessages(w http.ResponseWriter, r *http.Request) {
 	reqToken := r.Header.Get("Authorization")
+	lastMesgSerialNo, err := strconv.Parse(r.Header.Get("SinceSerialNo"), 2, 16)
+	if err != nil {
+		lastMesgSerialNo = 0
+	}
 	var accessCode string
 	if len(reqToken) > 0 {
 		splitToken := strings.Split(reqToken, "Bearer")
@@ -485,15 +498,17 @@ func GetMessages(w http.ResponseWriter, r *http.Request) {
 
 		_, _, _, userId := dbGetAllDetails(accessCode, domainName)
 		result := make(map[string]interface{})
-		result["messages"], _ = dbGetMessages(accessCode)
+		mesgs, lastMesgSerialNo := dbGetMessages(accessCode, lastMesgSerialNo)
+		result["messages"] = mesgs
 		result["userId"] = userId
+		result["lastSerialNo"] = lastMesgSerialNo
 		enc := json.NewEncoder(w) //
 		enc.Encode(result)
 	} else {
 		log.Fatal("No Tockemmn")
 	}
 }
-func GetMessages1(w http.ResponseWriter, r *http.Request) {
+*/func GetMessages1(w http.ResponseWriter, r *http.Request) {
 	reqToken := r.Header.Get("Authorization")
 	var accessCode string
 	if len(reqToken) > 0 {
