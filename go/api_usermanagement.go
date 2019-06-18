@@ -121,8 +121,13 @@ func checkOwnerOnline(domainName string) map[string]interface{} {
 			json.Unmarshal([]byte(data), &f)
 			m := f.(map[string]interface{})
 			prsent = m["presence"].(string)
-			timeactive = m["last_active_ago"].(float64)
 			displayName = displayNames[i]
+
+			if m["last_active_ago"] == nil {
+				timeactive = -1
+			} else {
+				timeactive = m["last_active_ago"].(float64)
+			}
 			if prsent == "online" {
 				break
 			}

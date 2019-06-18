@@ -57,6 +57,13 @@ var routes = Routes{
 		SubmitChat,
 		false,
 	},
+	Route{
+		"SaveFeedback",
+		strings.ToUpper("Post"),
+		"/chat/feedback",
+		SaveFeedback,
+		false,
+	},
 	/* Route{
 		"GetMessages",
 		strings.ToUpper("get"),
