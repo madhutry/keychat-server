@@ -11,6 +11,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 
@@ -19,7 +20,7 @@ import (
 )
 
 func main() {
-
+	fmt.Println("New version Chat Server:1")
 	router := sw.NewRouter()
 	sw.InitConfig()
 	go sw.HandleMessages()
