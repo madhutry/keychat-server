@@ -200,8 +200,9 @@ func dbGetMessages(friezeAccCd string, lastSince uint64) ([][]string, uint64) {
 	   	and a.customer_read=0
 	   	order by a.create_ts asc` */
 
-	selectMesg := `select a.id,message,COALESCE(d.display_name, sender),a.server_received_ts,a.mesg_id from  chat_registration b, access_code_map c,messages a  LEFT OUTER JOIN agents d
- 	ON d.userid=sender
+	selectMesg := `select a.id,message,COALESCE(d.display_name,e.display_name, sender),a.server_received_ts,a.mesg_id from  chat_registration b, access_code_map c,messages a  
+	LEFT OUTER JOIN agents d ON d.userid=sender
+	LEFT OUTER JOIN mat_acc_cd_owner e ON e.userid=sender
 	where
 	a.room_id=b.room_id
 	and b.id=c.registration_id
