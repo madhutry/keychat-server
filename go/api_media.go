@@ -54,7 +54,7 @@ func UploadImageOptions(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 }
 func uploadToMatrix(matrixAccessCode string, data []byte, contentType string) string {
-	apiHost := "http://%s/media/upload?filename=sdfd.jpg"
+	apiHost := "http://%s/_matrix/media/v1/upload?filename=sdfd.jpg"
 	endpoint := fmt.Sprintf(apiHost, GetMatrixServerUrl())
 	client := &http.Client{}
 	request, err := http.NewRequest("POST", endpoint, bytes.NewBuffer(data))
