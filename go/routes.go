@@ -85,6 +85,20 @@ var routes = Routes{
 		UpgradeWS,
 		false,
 	},
+	Route{
+		"UploadImagePut",
+		strings.ToUpper("Post"),
+		"/media/upload",
+		UploadImagePut,
+		false,
+	},
+	Route{
+		"UploadImageOptions",
+		strings.ToUpper("Options"),
+		"/media/upload",
+		UploadImageOptions,
+		false,
+	},
 }
 
 func authMiddleware(next http.Handler) http.Handler {

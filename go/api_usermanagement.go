@@ -200,9 +200,12 @@ func dbGetMessages(friezeAccCd string, lastSince uint64) ([][]string, uint64) {
 	   	and a.customer_read=0
 	   	order by a.create_ts asc` */
 
-	selectMesg := `select a.id,message,COALESCE(d.display_name,e.display_name, sender),a.server_received_ts,a.mesg_id from  chat_registration b, access_code_map c,messages a  
+	selectMesg := `select a.id,message,COALESCE(d.display_name,e.display_name, sender),a.server_received_ts,
+	a.mesg_id,a.mesg_type,COALESCE(f.response ->> 'url',g.url) as url  from  chat_registration b, access_code_map c,messages a  
 	LEFT OUTER JOIN agents d ON d.userid=sender
 	LEFT OUTER JOIN mat_acc_cd_owner e ON e.userid=sender
+	LEFT OUTER JOIN image_upload_cloudinary f ON f.matrixid=a.url
+	LEFT OUTER JOIN s3_upload g ON g.matrix_content_id=a.url
 	where
 	a.room_id=b.room_id
 	and b.id=c.registration_id
@@ -224,9 +227,11 @@ func dbGetMessages(friezeAccCd string, lastSince uint64) ([][]string, uint64) {
 	var timestamp string
 	var msgid string
 	var msgSerialId uint64
+	var msgType string
+	var imgUrl string
 	for rows.Next() {
-		rows.Scan(&msgSerialId, &messageTxt, &sender, &timestamp, &msgid)
-		mesg1 := []string{messageTxt, timestamp, sender, msgid}
+		rows.Scan(&msgSerialId, &messageTxt, &sender, &timestamp, &msgid, &msgType, &imgUrl)
+		mesg1 := []string{messageTxt, timestamp, sender, msgid, msgType, imgUrl}
 		messages = append(messages, mesg1)
 	}
 	return messages, msgSerialId
