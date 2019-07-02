@@ -472,7 +472,8 @@ func apiCreateRoom(accessCode string, fullname string, userid string, mobileno s
 
 	jsonData := map[string]string{
 		"room_alias_name": roomAlias,
-		"topic":           fmt.Sprintf("Name:%s,Mobile:%s", fullname, mobileno),
+		"topic":           "TODO",
+		"name":            fmt.Sprintf("Name:%s-Mobile:%s", fullname, mobileno),
 	}
 	apiHost := "http://%s/_matrix/client/r0/createRoom?access_token=%s"
 	endpoint := fmt.Sprintf(apiHost, GetMatrixServerUrl(), accessCode)
