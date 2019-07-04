@@ -391,7 +391,7 @@ func registerMatrixChatUser(fullname string, mobileno string, extraInfo interfac
 			"session": "ffdfdasfdsfadsf",
 			"type":    "m.login.dummy",
 		},
-		"username":      username,
+		"username":      "A" + username,
 		"password":      "palava123",
 		"bind_email":    false,
 		"bind_msisdn":   false,
@@ -629,6 +629,7 @@ func apiSendMessage(matAccessCode string, roomId string, message string, uuid st
 	}
 	apiHost := "http://%s/_matrix/client/r0/rooms/%s/send/m.room.message?access_token=%s"
 	endpoint := fmt.Sprintf(apiHost, GetMatrixServerUrl(), roomId, matAccessCode)
+	fmt.Println(endpoint)
 	jsonValue, _ := json.Marshal(jsonData)
 	response, err := http.Post(endpoint, "application/json", bytes.NewBuffer(jsonValue))
 	if err != nil {
