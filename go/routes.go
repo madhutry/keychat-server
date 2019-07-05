@@ -42,7 +42,13 @@ func Index(w http.ResponseWriter, r *http.Request) {
 }
 
 var routes = Routes{
-
+	Route{
+		"GenerateToken",
+		strings.ToUpper("Post"),
+		"/chat/token",
+		GenerateToken,
+		false,
+	},
 	Route{
 		"OpenChat",
 		strings.ToUpper("Post"),

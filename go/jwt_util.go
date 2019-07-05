@@ -18,12 +18,13 @@ func GenerateTokenWithUserID(friezeAccessCode string, domainName string, userId 
 	tokenString, err := token.SignedString([]byte("secret"))
 	return tokenString, err
 }
-func GenerateToken(friezeAccessCode string, domainName string, fullname string) (string, error) {
+
+func GenerateTokenWithIp(friezeAccessCode string, domainName string, ipaddress string) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"FriezeAccessCode": friezeAccessCode,
 		"DomainName":       domainName,
 		"nbf":              time.Now(),
-		"Fullname":         fullname,
+		"ipaddress":        ipaddress,
 	})
 	tokenString, err := token.SignedString([]byte("secret"))
 	return tokenString, err

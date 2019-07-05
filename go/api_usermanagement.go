@@ -14,6 +14,26 @@ import (
 	pborman "github.com/pborman/uuid"
 )
 
+func ReadUserIP(r *http.Request) string {
+	IPAddress := r.Header.Get("X-Real-Ip")
+	if IPAddress == "" {
+		IPAddress = r.Header.Get("X-Forwarded-For")
+	}
+	if IPAddress == "" {
+		IPAddress = r.RemoteAddr
+	}
+	return IPAddress
+}
+func GenerateToken(w http.ResponseWriter, r *http.Request) {
+	newFriezeChatAccessCode := pborman.NewRandom().String()
+	domainNm := r.Header.Get("X-Forwarded-Host")
+	newJWTToken, _ := GenerateTokenWithIp(newFriezeChatAccessCode, domainNm, ReadUserIP(r))
+	tokenJson := map[string]string{"token": newJWTToken}
+	enc := json.NewEncoder(w)
+	enc.Encode(tokenJson)
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	w.WriteHeader(http.StatusOK)
+}
 func SubmitChat(w http.ResponseWriter, r *http.Request) {
 	reqToken := r.Header.Get("Authorization")
 	newFriezeChatAccessCode := pborman.NewRandom().String()
