@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -702,8 +703,12 @@ func Sync(w http.ResponseWriter, r *http.Request) {
 }
 
 var stateAllowed = map[string]bool{
-	"m.room.member": true,
-	"m.room.create": true,
+	//"m.room.member": true,
+	//"m.room.create": true,
+	//"m.room.topic":true,
+	"m.room.power_levels":    true,
+	"m.room.canonical_alias": true,
+	"m.room.message":         true,
 }
 
 func syncFromMatrix(matrixAccessCode string, data []byte, contentType string) (int, []byte) {
@@ -736,19 +741,102 @@ func syncFromMatrix(matrixAccessCode string, data []byte, contentType string) (i
 					newStateEnts = append(newStateEnts, v1)
 				}
 			}
-			rooms[k].(map[string]interface{})["state"].(map[string]interface{})["events"] = newStateEnts
-
+			if newStateEnts != nil {
+				rooms[k].(map[string]interface{})["state"].(map[string]interface{})["events"] = newStateEnts
+			} else {
+				rooms[k].(map[string]interface{})["state"].(map[string]interface{})["events"] = make([]int64, 0)
+			}
 			//rooms[k].(map[string]interface{})["state"].(map[string]interface{})["events"] = make([]int64, 0)
 			timelime := rooms[k].(map[string]interface{})["timeline"].(map[string]interface{})["events"]
 			events := timelime.([]interface{})
 			var newEnts []interface{}
 			for _, v1 := range events {
 				mesgType := v1.(map[string]interface{})["type"].(string)
-				if mesgType == "m.room.message" {
+				if stateAllowed[mesgType] {
 					newEnts = append(newEnts, v1)
 				}
 			}
-			rooms[k].(map[string]interface{})["timeline"].(map[string]interface{})["events"] = newEnts
+			if newEnts != nil {
+				rooms[k].(map[string]interface{})["timeline"].(map[string]interface{})["events"] = newEnts
+			} else {
+				rooms[k].(map[string]interface{})["timeline"].(map[string]interface{})["events"] = make([]int64, 0)
+			}
+
+		}
+		resultb, err := json.Marshal(jsonMap)
+		if err != nil {
+			log.Panic("Cannot Marshal Syn Response")
+		}
+		return response.StatusCode, resultb
+
+	}
+}
+func Messages(w http.ResponseWriter, r *http.Request) {
+	body, readErr := ioutil.ReadAll(r.Body)
+	if readErr != nil {
+		fmt.Println("Error")
+	}
+	defer r.Body.Close()
+	reqToken := r.Header.Get("Authorization")
+
+	splitToken := strings.Split(reqToken, "Bearer")
+	matAccessCode := strings.TrimSpace(splitToken[1])
+	url, _ := url.QueryUnescape(r.URL.String())
+	code, body := processMatrixMessages(matAccessCode, url)
+
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Write(body)
+	w.WriteHeader(code)
+}
+
+func processMatrixMessages(matrixAccessCode string, uri string) (int, []byte) {
+	apiHost := `http://%s/_matrix/client/r0` + uri
+	endpoint := fmt.Sprintf(apiHost, GetMatrixServerUrl())
+	endpoint = strings.Replace(fmt.Sprintf(endpoint), "/mobile/", "/", -1)
+	fmt.Println(endpoint)
+	client := &http.Client{}
+	request, err := http.NewRequest("GET", endpoint, nil)
+	request.Header.Add("Authorization", "Bearer "+matrixAccessCode)
+	response, err := client.Do(request)
+	fmt.Print(response.StatusCode)
+	if err != nil {
+		fmt.Printf("The HTTP request failed with error %s\n", err)
+		return 500, []byte{}
+	} else {
+		data, _ := ioutil.ReadAll(response.Body)
+
+		jsonMap := make(map[string]interface{})
+		err := json.Unmarshal(data, &jsonMap)
+		if err != nil {
+			log.Panic(err)
+		}
+		chunks := jsonMap["chunk"].([]interface{})
+		var newChunks []interface{}
+		for _, chunk := range chunks {
+			mesgType := chunk.(map[string]interface{})["type"].(string)
+			if stateAllowed[mesgType] {
+				newChunks = append(newChunks, chunk)
+			}
+		}
+		if newChunks != nil {
+			jsonMap["chunk"] = newChunks
+		} else {
+			jsonMap["chunk"] = make([]int64, 0)
+		}
+		states := jsonMap["state"].([]interface{})
+		var newState []interface{}
+		for _, state := range states {
+			mesgType := state.(map[string]interface{})["type"].(string)
+			if stateAllowed[mesgType] {
+				newState = append(newState, state)
+			}
+		}
+		if newState != nil {
+			jsonMap["state"] = newState
+		} else {
+			jsonMap["state"] = make([]int64, 0)
 		}
 		resultb, err := json.Marshal(jsonMap)
 		if err != nil {

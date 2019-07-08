@@ -43,6 +43,13 @@ func Index(w http.ResponseWriter, r *http.Request) {
 
 var routes = Routes{
 	Route{
+		"Messages",
+		strings.ToUpper("Get"),
+		"/mobile/rooms/{roomId}/messages",
+		Messages,
+		false,
+	},
+	Route{
 		"Sync",
 		strings.ToUpper("Get"),
 		"/mobile/sync",
