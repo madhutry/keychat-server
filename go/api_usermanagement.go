@@ -700,6 +700,12 @@ func Sync(w http.ResponseWriter, r *http.Request) {
 	w.Write(body)
 	w.WriteHeader(code)
 }
+
+var stateAllowed = map[string]bool{
+	"m.room.member": true,
+	"m.room.create": true,
+}
+
 func syncFromMatrix(matrixAccessCode string, data []byte, contentType string) (int, []byte) {
 	apiHost := `http://%s/_matrix/client/r0/sync?filter={"room":{"state":{"lazy_load_members":true}}}&set_presence=offline&timeout=0`
 	endpoint := fmt.Sprintf(apiHost, GetMatrixServerUrl())
@@ -722,7 +728,17 @@ func syncFromMatrix(matrixAccessCode string, data []byte, contentType string) (i
 		rooms := jsonMap["rooms"].(map[string]interface{})["join"].(map[string]interface{})
 		for k := range rooms {
 			log.Println("Room ID" + k)
-			rooms[k].(map[string]interface{})["state"].(map[string]interface{})["events"] = make([]int64, 0)
+			stateEvent := rooms[k].(map[string]interface{})["state"].(map[string]interface{})["events"].([]interface{})
+			var newStateEnts []interface{}
+			for _, v1 := range stateEvent {
+				mesgType := v1.(map[string]interface{})["type"].(string)
+				if stateAllowed[mesgType] {
+					newStateEnts = append(newStateEnts, v1)
+				}
+			}
+			rooms[k].(map[string]interface{})["state"].(map[string]interface{})["events"] = newStateEnts
+
+			//rooms[k].(map[string]interface{})["state"].(map[string]interface{})["events"] = make([]int64, 0)
 			timelime := rooms[k].(map[string]interface{})["timeline"].(map[string]interface{})["events"]
 			events := timelime.([]interface{})
 			var newEnts []interface{}
