@@ -681,3 +681,63 @@ func apiJoinRoom(matAccCode []string, roomId string) {
 		}
 	}
 }
+func Sync(w http.ResponseWriter, r *http.Request) {
+	body, readErr := ioutil.ReadAll(r.Body)
+	if readErr != nil {
+		fmt.Println("Error")
+	}
+	defer r.Body.Close()
+	reqToken := r.Header.Get("Authorization")
+
+	contentType := r.Header.Get("Content-Type")
+	splitToken := strings.Split(reqToken, "Bearer")
+	matAccessCode := strings.TrimSpace(splitToken[1])
+	code, body := syncFromMatrix(matAccessCode, body, contentType)
+
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Write(body)
+	w.WriteHeader(code)
+}
+func syncFromMatrix(matrixAccessCode string, data []byte, contentType string) (int, []byte) {
+	apiHost := `http://%s/_matrix/client/r0/sync?filter={"room":{"state":{"lazy_load_members":true}}}&set_presence=offline&timeout=0`
+	endpoint := fmt.Sprintf(apiHost, GetMatrixServerUrl())
+	client := &http.Client{}
+	request, err := http.NewRequest("GET", endpoint, nil)
+	request.Header.Add("Authorization", "Bearer "+matrixAccessCode)
+	response, err := client.Do(request)
+	fmt.Print(response.StatusCode)
+	if err != nil {
+		fmt.Printf("The HTTP request failed with error %s\n", err)
+		return 500, []byte{}
+	} else {
+		data, _ := ioutil.ReadAll(response.Body)
+
+		jsonMap := make(map[string]interface{})
+		err := json.Unmarshal(data, &jsonMap)
+		if err != nil {
+			log.Panic(err)
+		}
+		rooms := jsonMap["rooms"].(map[string]interface{})["join"].(map[string]interface{})
+		for k := range rooms {
+			log.Println("Room ID" + k)
+			timelime := rooms[k].(map[string]interface{})["timeline"].(map[string]interface{})["events"]
+			events := timelime.([]interface{})
+			var newEnts []interface{}
+			for _, v1 := range events {
+				mesgType := v1.(map[string]interface{})["type"].(string)
+				if mesgType == "m.room.message" {
+					newEnts = append(newEnts, v1)
+				}
+			}
+			rooms[k].(map[string]interface{})["timeline"].(map[string]interface{})["events"] = newEnts
+		}
+		resultb, err := json.Marshal(jsonMap)
+		if err != nil {
+			log.Panic("Cannot Marshal Syn Response")
+		}
+		return response.StatusCode, resultb
+
+	}
+}
