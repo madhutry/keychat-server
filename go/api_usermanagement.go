@@ -722,6 +722,9 @@ func syncFromMatrix(matrixAccessCode string, data []byte, contentType string) (i
 		rooms := jsonMap["rooms"].(map[string]interface{})["join"].(map[string]interface{})
 		for k := range rooms {
 			log.Println("Room ID" + k)
+			var newStateEnts []interface{}
+			rooms[k].(map[string]interface{})["state"].(map[string]interface{})["events"] = newStateEnts
+
 			timelime := rooms[k].(map[string]interface{})["timeline"].(map[string]interface{})["events"]
 			events := timelime.([]interface{})
 			var newEnts []interface{}
