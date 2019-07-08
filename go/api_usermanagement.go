@@ -825,18 +825,20 @@ func processMatrixMessages(matrixAccessCode string, uri string) (int, []byte) {
 		} else {
 			jsonMap["chunk"] = make([]int64, 0)
 		}
-		states := jsonMap["state"].([]interface{})
-		var newState []interface{}
-		for _, state := range states {
-			mesgType := state.(map[string]interface{})["type"].(string)
-			if stateAllowed[mesgType] {
-				newState = append(newState, state)
+		if _, ok := jsonMap["state"]; ok {
+			states := jsonMap["state"].([]interface{})
+			var newState []interface{}
+			for _, state := range states {
+				mesgType := state.(map[string]interface{})["type"].(string)
+				if stateAllowed[mesgType] {
+					newState = append(newState, state)
+				}
 			}
-		}
-		if newState != nil {
-			jsonMap["state"] = newState
-		} else {
-			jsonMap["state"] = make([]int64, 0)
+			if newState != nil {
+				//jsonMap["state"] = newState
+			} else {
+				//jsonMap["state"] = make([]int64, 0)
+			}
 		}
 		resultb, err := json.Marshal(jsonMap)
 		if err != nil {
