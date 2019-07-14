@@ -51,3 +51,6 @@ func GetS3ParentFolder() string {
 func GetS3ObjectBucket() string {
 	return viper.GetString("OBJECT_BUCKET")
 }
+func GetFCMServerCode() string {
+	return viper.GetString("FCM_SERVER_CODE")
+}

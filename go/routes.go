@@ -50,6 +50,13 @@ var routes = Routes{
 		false,
 	},
 	Route{
+		"FcmNotify",
+		strings.ToUpper("Post"),
+		"/mobile/notify",
+		FcmNotify,
+		false,
+	},
+	Route{
 		"Sync",
 		strings.ToUpper("Get"),
 		"/mobile/sync",
