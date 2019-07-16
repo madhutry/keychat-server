@@ -1,4 +1,4 @@
-package swagger
+package friezechat
 
 import (
 	"encoding/json"
@@ -10,16 +10,6 @@ import (
 	"gopkg.in/gomail.v2"
 )
 
-func ReadUserIP(r *http.Request) string {
-	IPAddress := r.Header.Get("X-Real-Ip")
-	if IPAddress == "" {
-		IPAddress = r.Header.Get("X-Forwarded-For")
-	}
-	if IPAddress == "" {
-		IPAddress = r.RemoteAddr
-	}
-	return IPAddress
-}
 func SaveRegister(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	body, _ := ioutil.ReadAll(r.Body)
@@ -33,7 +23,7 @@ func SaveRegister(w http.ResponseWriter, r *http.Request) {
 	INSERT INTO register ( fname,emailid,ip_addr) VALUES( $1,  $2,$3 )	`
 	insertFeedbackStmt, _ := db.Prepare(insertFeedback)
 
-	_, err = insertFeedbackStmt.Exec(fullname, emailid, ReadUserIP(r))
+	_, err := insertFeedbackStmt.Exec(fullname, emailid, ReadUserIP(r))
 	if err != nil {
 		log.Fatal(err)
 	}
