@@ -693,7 +693,7 @@ func Sync(w http.ResponseWriter, r *http.Request) {
 	contentType := r.Header.Get("Content-Type")
 	splitToken := strings.Split(reqToken, "Bearer")
 	matAccessCode := strings.TrimSpace(splitToken[1])
-	uri, _ := url.QueryUnescape(r.URL.RequestURI())
+	uri, _ := url.QueryUnescape(r.URL.Query().Encode())
 	code, body := syncFromMatrix(matAccessCode, body, contentType, uri)
 
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
@@ -714,7 +714,7 @@ var stateAllowed = map[string]bool{
 
 func syncFromMatrix(matrixAccessCode string, data []byte, contentType string, uri string) (int, []byte) {
 	//apiHost := `http://%s/_matrix/client/r0/sync?filter={"room":{"state":{"lazy_load_members":true}}}&set_presence=offline&timeout=0`
-	apiHost := "http://%s%s"
+	apiHost := "http://%s/_matrix/client/r0/sync?%s"
 	endpoint := fmt.Sprintf(apiHost, GetMatrixServerUrl(), uri)
 	fmt.Printf("URL MAtrix:%s", endpoint)
 	client := &http.Client{}
