@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -126,7 +127,7 @@ func OpenChat(w http.ResponseWriter, r *http.Request) {
 }
 func checkOwnerOnline(domainName string) map[string]interface{} {
 	apiHost := "http://%s/_matrix/client/r0/presence/%s/status?access_token=%s"
-	agentsDetails, displayNames, matCodes := dbGetAgents(domainName)
+	agentsDetails, displayNames, matCodes, timeRecvd := dbGetAgents(domainName)
 	prsent := "offline"
 	timeactive := float64(0)
 	displayName := ""
@@ -151,11 +152,19 @@ func checkOwnerOnline(domainName string) map[string]interface{} {
 			}
 			if prsent == "online" {
 				break
+			} else {
+				t, _ := strconv.ParseInt(timeRecvd[i], 10, 64)
+				t0 := time.Unix(0, int64(t)*int64(time.Millisecond))
+				t1 := time.Now()
+				fmt.Printf("The call took %v to run.\n", t1.Sub(t0).Minutes())
 			}
 		}
 	}
 	result := map[string]interface{}{"msgType": "checkOnline", "online": prsent, "activetime": timeactive, "displayName": displayName}
 	return result
+}
+func checkDbOwnerOnline(ownerId string) {
+
 }
 func dbDeactivateOldAccessCode(friezeChatAccessCode string, domainName string) {
 	deactivateAccCode := `UPDATE access_code_map SET active = 0 WHERE frieze_access_code = $1 AND
@@ -295,15 +304,15 @@ func dbGetNotifcationDetails(roomId string) string {
 	matAccCodeStmt.QueryRow(roomId).Scan(&matAccessCode)
 	return matAccessCode
 }
-func dbGetAgents(domainName string) ([]string, []string, []string) {
+func dbGetAgents(domainName string) ([]string, []string, []string, []string) {
 
 	userIdsSql := `SELECT 
-	userid,display_name,matrix_access_code
+	userid,display_name,matrix_access_code,last_mesg_recd_time
 	FROM mat_acc_cd_owner
 	WHERE domain_name=$1
 	UNION
 	SELECT 
-	b.userid,b.display_name,b.matrix_access_code
+	b.userid,b.display_name,b.matrix_access_code,null
 	FROM mat_acc_cd_owner a, agents b
 	WHERE domain_name=$2
 	and a.id=b.main_owner_id`
@@ -322,18 +331,20 @@ func dbGetAgents(domainName string) ([]string, []string, []string) {
 	var userIds []string
 	var displayNames []string
 	var matAccCodes []string
+	var timeRecds []string
 
 	for rows.Next() {
 		var userId string
 		var displayName string
 		var matAccCode string
-
-		rows.Scan(&userId, &displayName, &matAccCode)
+		var timeRecvd string
+		rows.Scan(&userId, &displayName, &matAccCode, &timeRecvd)
 		userIds = append(userIds, userId)
 		displayNames = append(displayNames, displayName)
 		matAccCodes = append(matAccCodes, matAccCode)
+		timeRecds = append(timeRecds, timeRecvd)
 	}
-	return userIds, displayNames, matAccCodes
+	return userIds, displayNames, matAccCodes, timeRecds
 }
 func dbGetDomainRelatedData(domainName string) ([]string, [][]string) {
 
@@ -716,7 +727,7 @@ func syncFromMatrix(matrixAccessCode string, data []byte, contentType string, ur
 	//apiHost := `http://%s/_matrix/client/r0/sync?filter={"room":{"state":{"lazy_load_members":true}}}&set_presence=offline&timeout=0`
 	apiHost := "http://%s/_matrix/client/r0/sync?%s"
 	endpoint := fmt.Sprintf(apiHost, GetMatrixServerUrl(), uri)
-	fmt.Printf("URL MAtrix:%s", endpoint)
+	fmt.Printf("URL MAtrix:%s\n", endpoint)
 	client := &http.Client{}
 	request, err := http.NewRequest("GET", endpoint, nil)
 	request.Header.Add("Authorization", "Bearer "+matrixAccessCode)
