@@ -154,10 +154,10 @@ func checkOwnerOnline(domainName string) map[string]interface{} {
 				break
 			} else {
 				if len(timeRecvd[i]) > 0 {
-					t, _ := strconv.ParseInt(timeRecvd[i], 10, 64)
+					t, _ := strconv.ParseInt(strings.Split(timeRecvd[i], ".")[0], 10, 64)
 					t0 := time.Unix(0, int64(t)*int64(time.Millisecond))
 					t1 := time.Now()
-					if t1.Sub(t0).Minutes() < 5 {
+					if int(t1.Sub(t0).Minutes()) < 5 {
 						prsent = "online"
 						timeactive, _ = strconv.ParseFloat(timeRecvd[i], 64)
 						break
