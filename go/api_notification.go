@@ -68,10 +68,12 @@ func HandleMessages() {
 
 		if mesgType == "sendmesg" {
 			sendMessage(friezeAccessCode, domainName, mesg, uuid)
+		} else if mesgType == "cardmesg" {
+			saveCardInfo(friezeAccessCode, domainName, mesg, uuid)
 		} else if mesgType == "ping" {
 			lastSerialNo := msg.LastSerialNo
 			result := make(map[string]interface{})
-			result["messages"], result["lastSerialId"] = dbGetMessages(friezeAccessCode, lastSerialNo)
+			result["messages"], result["lastSerialId"], result["cardresp"] = dbGetMessages(friezeAccessCode, lastSerialNo)
 			result["userId"] = userId
 			sock.WriteJSON(result)
 		} else if mesgType == "checkagentonline" {

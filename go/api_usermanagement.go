@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -29,6 +30,9 @@ func ReadUserIP(r *http.Request) string {
 func GenerateToken(w http.ResponseWriter, r *http.Request) {
 	newFriezeChatAccessCode := pborman.NewRandom().String()
 	domainNm := r.Header.Get("X-Forwarded-Host")
+	if len(domainNm) == 0 {
+		domainNm = r.Host
+	}
 	newJWTToken, _ := GenerateTokenWithIp(newFriezeChatAccessCode, domainNm, ReadUserIP(r))
 	tokenJson := map[string]string{"token": newJWTToken}
 	enc := json.NewEncoder(w)
@@ -186,6 +190,33 @@ func dbDeactivateOldAccessCode(friezeChatAccessCode string, domainName string) {
 		panic(err)
 	}
 }
+func dbDeactivateOldCardResponse(mesgId string) {
+	deactivateCardResponse := `UPDATE cardmessage_response SET active = 'N' WHERE mesg_id = $1 `
+	db := Envdb.db
+	deactivateCardResponseStmt, err := db.Prepare(deactivateCardResponse)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer deactivateCardResponseStmt.Close()
+	_, err = deactivateCardResponseStmt.Exec(mesgId)
+	if err != nil {
+		panic(err)
+	}
+}
+func dbInsertMessageCardResponse(mesgId string, mesg string) {
+	insertCardResp := `INSERT INTO cardmessage_response (mesg_id,response) VALUES ($1,$2)`
+	db := Envdb.db
+
+	insertCardRespStmt, err := db.Prepare(insertCardResp)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer insertCardRespStmt.Close()
+	_, err = insertCardRespStmt.Exec(mesgId, mesg)
+	if err != nil {
+		panic(err)
+	}
+}
 func dbInsertRegistrationExtra(fullName string, mobile string, extra interface{},
 	friezeAccessCode string, regId string, roomId string, roomAlias string, prevBatchId string, userId string) {
 
@@ -227,7 +258,7 @@ func dbInsertRegistration(fullName string, mobile string,
 		panic(err)
 	}
 }
-func dbGetMessages(friezeAccCd string, lastSince uint64) ([][]string, uint64) {
+func dbGetMessages(friezeAccCd string, lastSince uint64) ([][]string, uint64, map[string]string) {
 	/* 	selectMesg := `select message,sender,a.server_received_ts,a.mesg_id from messages a , chat_registration b, access_code_map c
 	   	where
 	   	a.room_id=b.room_id
@@ -237,11 +268,12 @@ func dbGetMessages(friezeAccCd string, lastSince uint64) ([][]string, uint64) {
 	   	order by a.create_ts asc` */
 
 	selectMesg := `select a.id,message,COALESCE(d.display_name,e.display_name, sender),a.server_received_ts,
-	a.mesg_id,a.mesg_type,COALESCE(f.response ->> 'url',g.url) as url  from  chat_registration b, access_code_map c,messages a  
+	a.mesg_id,a.mesg_type,COALESCE(f.response ->> 'url',g.url) as url,cmr.response as cardresp from  chat_registration b, access_code_map c,messages a  
 	LEFT OUTER JOIN agents d ON d.userid=sender
 	LEFT OUTER JOIN mat_acc_cd_owner e ON e.userid=sender
 	LEFT OUTER JOIN image_upload_cloudinary f ON f.matrixid=a.url
 	LEFT OUTER JOIN s3_upload g ON g.matrix_content_id=a.url
+	LEFT OUTER JOIN cardmessage_response cmr ON cmr.mesg_id=a.mesg_id and cmr.active='Y'
 	where
 	a.room_id=b.room_id
 	and b.id=c.registration_id
@@ -264,13 +296,28 @@ func dbGetMessages(friezeAccCd string, lastSince uint64) ([][]string, uint64) {
 	var msgid string
 	var msgSerialId uint64
 	var msgType string
-	var imgUrl string
+	var imgUrl sql.NullString
+	var cardResp sql.NullString
+
+	cardResps := make(map[string]string)
+
 	for rows.Next() {
-		rows.Scan(&msgSerialId, &messageTxt, &sender, &timestamp, &msgid, &msgType, &imgUrl)
-		mesg1 := []string{messageTxt, timestamp, sender, msgid, msgType, imgUrl}
+		rows.Scan(&msgSerialId, &messageTxt, &sender, &timestamp, &msgid, &msgType, &imgUrl, &cardResp)
+		mesg1 := []string{messageTxt, timestamp, sender, msgid, msgType, getSqlVal(imgUrl)}
 		messages = append(messages, mesg1)
+		if len(getSqlVal(cardResp)) > 0 {
+			cardResps[msgid] = getSqlVal(cardResp)
+		}
 	}
-	return messages, msgSerialId
+	return messages, msgSerialId, cardResps
+}
+func getSqlVal(valSql sql.NullString) string {
+	val, err := valSql.Value()
+	if val == nil || err != nil {
+		return ""
+	} else {
+		return val.(string)
+	}
 }
 func dbGetAllDetails(accessCode string, domainName string) (string, string, string, string) {
 	log.Println("dbGetAllDetails:" + accessCode + ":" + domainName)
@@ -614,6 +661,22 @@ func SendMessage(w http.ResponseWriter, r *http.Request) {
 		log.Fatal("No Tockemmn")
 	}
 }
+func saveCardInfo(friezeAccessCode string, domainName string, message string, uuid string) {
+	var f interface{}
+	json.Unmarshal([]byte(message), &f)
+	subMesgType := f.(map[string]interface{})["cardInfo"]
+	mesgId := f.(map[string]interface{})["mesgId"].(string)
+	roomId, matAccessCode, _, _ := dbGetAllDetails(friezeAccessCode, domainName)
+	fmt.Println(roomId, matAccessCode)
+	dbDeactivateOldCardResponse(mesgId)
+	dbInsertMessageCardResponse(mesgId, message)
+	if subMesgType == "aptconfig" {
+		noOfRoom := f.(map[string]interface{})["rooms"]
+		deal := f.(map[string]interface{})["deal"]
+		apiSetTopic(matAccessCode, roomId, fmt.Sprintf("%s BHK,%s", noOfRoom, deal), uuid)
+	}
+
+}
 func sendMessage(friezeAccessCode string, domainName string, message string, uuid string) {
 	roomId, matAccessCode, _, _ := dbGetAllDetails(friezeAccessCode, domainName)
 	apiSendMessage(matAccessCode, roomId, message, uuid)
@@ -658,7 +721,52 @@ func apiGetMessages(accessCode string, roomId string, previousBatch string) map[
 		return result
 	}
 }
+func apiSetTopic(matAccessCode string, roomId string, topicName string, uuid string) {
 
+	jsonData := map[string]string{
+		"topic": topicName,
+	}
+	apiHost := "http://%s/_matrix/client/r0/rooms/%s/state/m.room.topic?access_token=%s"
+	endpoint := fmt.Sprintf(apiHost, GetMatrixServerUrl(), roomId, matAccessCode)
+	jsonValue, _ := json.Marshal(jsonData)
+	client := &http.Client{}
+
+	request, err := http.NewRequest("PUT", endpoint, bytes.NewBuffer(jsonValue))
+	request.Header.Add("Content-type", "application/json")
+	response, err := client.Do(request)
+	if err != nil {
+		fmt.Printf("The HTTP request failed with error %s\n", err)
+		return
+	} else {
+		data, _ := ioutil.ReadAll(response.Body)
+		var f interface{}
+		json.Unmarshal([]byte(data), &f)
+		var out1 bytes.Buffer
+		json.Indent(&out1, data, "=", "\t")
+		out1.WriteTo(os.Stdout)
+	}
+
+	// jsonData := map[string]string{
+	// 	"topic": topicName,
+	// }
+	// apiHost := "http://%s/_matrix/client/r0/rooms/%s/state/m.room.topic?access_token=%s"
+	// endpoint := fmt.Sprintf(apiHost, GetMatrixServerUrl(), roomId, roomId)
+	// fmt.Println(endpoint)
+	// jsonValue, _ := json.Marshal(jsonData)
+	// http.Post
+	// response, err := http.Post(endpoint, "application/json", bytes.NewBuffer(jsonValue))
+	// if err != nil {
+	// 	fmt.Printf("The HTTP request failed with error %s\n", err)
+	// 	return
+	// } else {
+	// 	data, _ := ioutil.ReadAll(response.Body)
+	// 	var f interface{}
+	// 	json.Unmarshal([]byte(data), &f)
+	// 	var out1 bytes.Buffer
+	// 	json.Indent(&out1, data, "=", "\t")
+	// 	out1.WriteTo(os.Stdout)
+	// }
+}
 func apiSendMessage(matAccessCode string, roomId string, message string, uuid string) {
 	jsonData := map[string]string{
 		"msgtype":  "m.text",
