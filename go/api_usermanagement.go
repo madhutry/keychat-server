@@ -895,7 +895,8 @@ func Sync(w http.ResponseWriter, r *http.Request) {
 var stateAllowed = map[string]bool{
 	//"m.room.member": true,
 	//"m.room.create": true,
-	//"m.room.topic":true,
+	"m.room.name":            true,
+	"m.room.topic":           true,
 	"m.room.power_levels":    true,
 	"m.room.canonical_alias": true,
 	"m.room.message":         true,
