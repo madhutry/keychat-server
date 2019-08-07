@@ -203,8 +203,8 @@ func dbDeactivateOldCardResponse(mesgId string) {
 		panic(err)
 	}
 }
-func dbInsertMessageCardResponse(mesgId string, mesg string) {
-	insertCardResp := `INSERT INTO cardmessage_response (mesg_id,response) VALUES ($1,$2)`
+func dbInsertMessageCardResponse(mesgId string, mesg string, eventId string) {
+	insertCardResp := `INSERT INTO cardmessage_response (mesg_id,response,event_id) VALUES ($1,$2,$3)`
 	db := Envdb.db
 
 	insertCardRespStmt, err := db.Prepare(insertCardResp)
@@ -212,7 +212,7 @@ func dbInsertMessageCardResponse(mesgId string, mesg string) {
 		log.Fatal(err)
 	}
 	defer insertCardRespStmt.Close()
-	_, err = insertCardRespStmt.Exec(mesgId, mesg)
+	_, err = insertCardRespStmt.Exec(mesgId, mesg, eventId)
 	if err != nil {
 		panic(err)
 	}
@@ -279,6 +279,7 @@ func dbGetMessages(friezeAccCd string, lastSince uint64) ([][]string, uint64, ma
 	and b.id=c.registration_id
 	and c.frieze_access_code=$1
 	and a.customer_read=0 
+	and a.mesg_type NOT LIKE 'm.notice'
 	and a.id>$2
 	order by a.create_ts asc;
 	`
@@ -341,7 +342,21 @@ func dbGetAllDetails(accessCode string, domainName string) (string, string, stri
 	val, _ := prevBatchId.Value()
 	return roomId, matAccessCode, val.(string), userId
 }
+func dbGetMessageDetails(mesgId string) (string, string) {
 
+	mesgDetail := `select message,event_id from messages where mesg_id=$1
+`
+	db := Envdb.db
+	var message string
+	var eventId string
+
+	mesgDetailStmt, err := db.Prepare(mesgDetail)
+	if err != nil {
+		log.Fatal(err)
+	}
+	mesgDetailStmt.QueryRow(mesgId).Scan(&message, &eventId)
+	return message, eventId
+}
 func dbGetNotifcationDetails(roomId string) string {
 
 	matAccCode := `select a.matrix_access_code from access_code_map a , chat_registration b
@@ -664,12 +679,14 @@ func SendMessage(w http.ResponseWriter, r *http.Request) {
 func saveCardInfo(friezeAccessCode string, domainName string, message string, uuid string) {
 	var f interface{}
 	json.Unmarshal([]byte(message), &f)
-	subMesgType := f.(map[string]interface{})["cardInfo"]
+	subMesgType := f.(map[string]interface{})["cardInfo"].(string)
 	mesgId := f.(map[string]interface{})["mesgId"].(string)
 	roomId, matAccessCode, _, _ := dbGetAllDetails(friezeAccessCode, domainName)
+	oldMesg, eventId := dbGetMessageDetails(mesgId)
 	fmt.Println(roomId, matAccessCode)
 	dbDeactivateOldCardResponse(mesgId)
-	dbInsertMessageCardResponse(mesgId, message)
+	dbInsertMessageCardResponse(mesgId, message, eventId)
+	apiSendMessageNotice(matAccessCode, roomId, f, eventId, subMesgType, oldMesg)
 	if subMesgType == "aptconfig" {
 		noOfRoom := f.(map[string]interface{})["rooms"]
 		deal := f.(map[string]interface{})["deal"]
@@ -741,9 +758,7 @@ func apiSetTopic(matAccessCode string, roomId string, topicName string, uuid str
 		data, _ := ioutil.ReadAll(response.Body)
 		var f interface{}
 		json.Unmarshal([]byte(data), &f)
-		var out1 bytes.Buffer
-		json.Indent(&out1, data, "=", "\t")
-		out1.WriteTo(os.Stdout)
+
 	}
 
 	// jsonData := map[string]string{
@@ -787,7 +802,56 @@ func apiSendMessage(matAccessCode string, roomId string, message string, uuid st
 		json.Unmarshal([]byte(data), &f)
 	}
 }
+func getBodyAptConfig(f interface{}) string {
+	noOfRoom := f.(map[string]interface{})["rooms"]
+	deal := f.(map[string]interface{})["deal"]
+	return fmt.Sprintf("Customer wants to %s %s BHK", deal, noOfRoom)
+}
+func getBodyRating(f interface{}) string {
+	rating := f.(map[string]interface{})["rating"].(float64)
+	return fmt.Sprintf("Customer has rated experience %d / 4", int(rating))
+}
+func apiSendMessageNotice(matAccessCode string, roomId string, f interface{}, eventId string, subMesgType string, mainMesg string) {
+	replyBody := ""
+	jsonData := `{
+		"body": "%s",
+		"format":  "org.matrix.custom.html",
+		"formatted_body" : "%s",
+		"msgtype": "m.notice",
+		"m.relates_to": {
+			"m.in_reply_to": {
+				"event_id": "%s"
+			}
+		}
+	}`
+	jsonValue := ""
+	if subMesgType == "aptconfig" {
+		templ := "<i>This is an reply to</i> <br/><strong>%s</strong> <br/><br/> <h3><strong>%s</strong></h3>"
+		replyBody = getBodyAptConfig(f)
+		jsonValue = fmt.Sprintf(jsonData, replyBody, fmt.Sprintf(templ, mainMesg, replyBody), eventId)
+	}
+	if subMesgType == "rating" {
+		templ := "<i>This is an reply to</i> <br/><strong>%s</strong> <br/><br/> <b>  <h3><strong>%s</strong></h3>"
+		replyBody = getBodyRating(f)
+		jsonValue = fmt.Sprintf(jsonData, replyBody, fmt.Sprintf(templ, mainMesg, replyBody), eventId)
+	}
 
+	apiHost := "http://%s/_matrix/client/r0/rooms/%s/send/m.room.message?access_token=%s"
+	endpoint := fmt.Sprintf(apiHost, GetMatrixServerUrl(), roomId, GetMatrixAdminCode())
+	fmt.Println(endpoint, jsonValue)
+	response, err := http.Post(endpoint, "application/json", bytes.NewBuffer([]byte(jsonValue)))
+	if err != nil {
+		fmt.Printf("The HTTP request failed with error %s\n", err)
+		return
+	} else {
+		data, _ := ioutil.ReadAll(response.Body)
+		var f interface{}
+		json.Unmarshal([]byte(data), &f)
+		var out1 bytes.Buffer
+		json.Indent(&out1, data, "=", "\t")
+		out1.WriteTo(os.Stdout)
+	}
+}
 func apiJoinRoom(matAccCode []string, roomId string) {
 	for _, codes := range matAccCode {
 		jsonData := map[string]string{}
