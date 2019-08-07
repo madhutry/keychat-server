@@ -946,6 +946,13 @@ func syncFromMatrix(matrixAccessCode string, data []byte, contentType string, ur
 			for _, v1 := range events {
 				mesgType := v1.(map[string]interface{})["type"].(string)
 				if stateAllowed[mesgType] {
+					if mesgType == "m.room.topic" {
+						unsigned := v1.(map[string]interface{})["unsigned"]
+						if unsigned != nil {
+							fmt.Println("afdsf")
+							delete(v1.(map[string]interface{}), "unsigned")
+						}
+					}
 					newEnts = append(newEnts, v1)
 				}
 			}
