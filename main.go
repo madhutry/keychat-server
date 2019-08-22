@@ -26,5 +26,5 @@ func main() {
 	go sw.HandleMessages()
 	sw.InitPostgres()
 	log.Printf("Server startead")
-	log.Fatal(http.ListenAndServe(":6060", router))
+	log.Fatal(http.ListenAndServe(":6060", limit(router)))
 }
