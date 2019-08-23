@@ -15,7 +15,7 @@ func GenerateTokenWithUserID(friezeAccessCode string, domainName string, userId 
 		"UserId":           userId,
 		"Fullname":         fullname,
 	})
-	tokenString, err := token.SignedString([]byte("secret"))
+	tokenString, err := token.SignedString([]byte("cY3ybTBOyNq3xgs3O6ziB6TSNO6ptaGbn0A6R60cHnZJrvT"))
 	return tokenString, err
 }
 
@@ -26,12 +26,12 @@ func GenerateTokenWithIp(friezeAccessCode string, domainName string, ipaddress s
 		"nbf":              time.Now(),
 		"ipaddress":        ipaddress,
 	})
-	tokenString, err := token.SignedString([]byte("secret"))
+	tokenString, err := token.SignedString([]byte("cY3ybTBOyNq3xgs3O6ziB6TSNO6ptaGbn0A6R60cHnZJrvT"))
 	return tokenString, err
 }
 func VerifyToken(reqToken string) (map[string]interface{}, error) {
 	token, err := jwt.Parse(reqToken, func(t *jwt.Token) (interface{}, error) {
-		return []byte("secret"), nil
+		return []byte("cY3ybTBOyNq3xgs3O6ziB6TSNO6ptaGbn0A6R60cHnZJrvT"), nil
 	})
 	if err != nil {
 		return nil, errors.New("math: square root of negative number")
