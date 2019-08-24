@@ -70,7 +70,7 @@ func SubmitChat(w http.ResponseWriter, r *http.Request) {
 		}
 		extraInfo := m["extrainfo"]
 		reqToken := m["token"]
-		_, err := VerifyToken(strings.TrimSpace(reqToken.(string)))
+		token, err := VerifyToken(strings.TrimSpace(reqToken.(string)))
 		if err != nil {
 			fmt.Println("Could not verify token")
 			log.Fatal(err)
