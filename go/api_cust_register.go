@@ -17,6 +17,12 @@ func SaveRegister(w http.ResponseWriter, r *http.Request) {
 	json.Unmarshal([]byte(body), &f)
 	fullname := f["fullname"].(string)
 	emailid := f["emailid"].(string)
+	if len(fullname) > 20 {
+		fullname = fullname[0:20]
+	}
+	if len(emailid) > 20 {
+		emailid = emailid[0:10]
+	}
 
 	db := Envdb.db
 	insertFeedback := `

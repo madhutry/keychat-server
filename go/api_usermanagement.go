@@ -55,9 +55,22 @@ func SubmitChat(w http.ResponseWriter, r *http.Request) {
 	if len(reqToken) == 0 {
 		fullname := m["fullname"]
 		mobileno := m["mobileno"]
+		dt := time.Now()
+		if m["fullname"] == nil || len(fullname.(string)) == 0 {
+			fullname = dt.Format("01-02-2006")
+		}
+		if m["mobileno"] == nil || len(mobileno.(string)) == 0 {
+			mobileno = dt.Format("15:04:05")
+		}
+		if len(fullname.(string)) > 20 {
+			fullname = fullname.(string)[0:20]
+		}
+		if len(mobileno.(string)) > 10 {
+			mobileno = mobileno.(string)[0:10]
+		}
 		extraInfo := m["extrainfo"]
 		reqToken := m["token"]
-		token, err := VerifyToken(strings.TrimSpace(reqToken.(string)))
+		_, err := VerifyToken(strings.TrimSpace(reqToken.(string)))
 		if err != nil {
 			fmt.Println("Could not verify token")
 			log.Fatal(err)
@@ -99,7 +112,19 @@ func OpenChat(w http.ResponseWriter, r *http.Request) {
 	if len(reqToken) == 0 {
 		fullname := m["fullname"]
 		mobileno := m["mobileno"]
-
+		dt := time.Now()
+		if m["fullname"] == nil {
+			fullname = dt.Format("01-02-2006")
+		}
+		if m["mobileno"] == nil {
+			mobileno = dt.Format("15:04:05")
+		}
+		if len(fullname.(string)) > 20 {
+			fullname = fullname.(string)[0:20]
+		}
+		if len(mobileno.(string)) > 10 {
+			mobileno = mobileno.(string)[0:10]
+		}
 		regId := pborman.NewRandom().String()
 		_, userId, avatarUrl, welcomeMsg := registerMatrixChatUser(fullname.(string), mobileno.(string), nil, newFriezeChatAccessCode, domainNm, regId)
 		newJWTToken, _ := GenerateTokenWithUserID(newFriezeChatAccessCode, domainNm, userId, fullname.(string))
