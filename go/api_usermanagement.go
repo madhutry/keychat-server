@@ -52,7 +52,26 @@ func SubmitChat(w http.ResponseWriter, r *http.Request) {
 	var f interface{}
 	json.Unmarshal([]byte(body), &f)
 	m := f.(map[string]interface{})
+
 	if len(reqToken) == 0 {
+		reqToken := m["token"]
+		token, err := VerifyToken(strings.TrimSpace(reqToken.(string)))
+		if err != nil {
+			fmt.Println("Could not verify token")
+			log.Fatal(err)
+		}
+		domainNm := token["DomainName"].(string)
+		lic := m["lic"]
+		if m["lic"] == nil || len(lic.(string)) == 0 {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		} else {
+			count := dbCheckFailedPseudoLic(lic.(string), domainNm)
+			if count == 0 {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+		}
 		fullname := m["fullname"]
 		mobileno := m["mobileno"]
 		dt := time.Now()
@@ -69,13 +88,7 @@ func SubmitChat(w http.ResponseWriter, r *http.Request) {
 			mobileno = mobileno.(string)[0:10]
 		}
 		extraInfo := m["extrainfo"]
-		reqToken := m["token"]
-		token, err := VerifyToken(strings.TrimSpace(reqToken.(string)))
-		if err != nil {
-			fmt.Println("Could not verify token")
-			log.Fatal(err)
-		}
-		domainNm := token["DomainName"].(string)
+
 		regId := pborman.NewRandom().String()
 		_, userId, avatarUrl, welcomeMsg := registerMatrixChatUser(fullname.(string), mobileno.(string), extraInfo, newFriezeChatAccessCode, domainNm, regId)
 		newJWTToken, _ := GenerateTokenWithUserID(newFriezeChatAccessCode, domainNm, userId, fullname.(string))

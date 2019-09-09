@@ -72,6 +72,13 @@ var routes = Routes{
 		false,
 	},
 	Route{
+		"ValidLicense",
+		strings.ToUpper("Post"),
+		"/chat/validatelic",
+		ValidLicense,
+		false,
+	},
+	Route{
 		"GenerateToken",
 		strings.ToUpper("Post"),
 		"/chat/token",
