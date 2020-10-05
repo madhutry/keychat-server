@@ -41,7 +41,6 @@ func GenerateToken(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 func SubmitChat(w http.ResponseWriter, r *http.Request) {
-	os.Setenv("HTTP_PROXY", "http://localhost:5555")
 	reqToken := r.Header.Get("Authorization")
 	newFriezeChatAccessCode := pborman.NewRandom().String()
 
