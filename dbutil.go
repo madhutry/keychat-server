@@ -1,7 +1,9 @@
-package friezechat
+package main
 
 import (
 	"database/sql"
+	"fmt"
+	"os"
 )
 
 type Env struct {
@@ -11,6 +13,8 @@ type Env struct {
 var Envdb *Env
 
 func InitPostgres() {
+	fmt.Println("Getting DBURL")
+	fmt.Println(os.Getenv("DB_URL"))
 	connString := GetDBUrl()
 	db, err := sql.Open("postgres", connString)
 	if err != nil {

@@ -1,4 +1,4 @@
-package friezechat
+package main
 
 import (
 	"bytes"
@@ -41,6 +41,7 @@ func GenerateToken(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 func SubmitChat(w http.ResponseWriter, r *http.Request) {
+	os.Setenv("HTTP_PROXY", "http://localhost:5555")
 	reqToken := r.Header.Get("Authorization")
 	newFriezeChatAccessCode := pborman.NewRandom().String()
 
@@ -61,17 +62,18 @@ func SubmitChat(w http.ResponseWriter, r *http.Request) {
 			log.Fatal(err)
 		}
 		domainNm := token["DomainName"].(string)
-		lic := m["lic"]
-		if m["lic"] == nil || len(lic.(string)) == 0 {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		} else {
-			count := dbCheckFailedPseudoLic(lic.(string), domainNm)
-			if count == 0 {
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
-		}
+		//lic := m["lic"]
+		//TODO:Disabling License as latest DB backup not available for restore
+		// if m["lic"] == nil || len(lic.(string)) == 0 {
+		// 	w.WriteHeader(http.StatusBadRequest)
+		// 	return
+		// } else {
+		// 	count := dbCheckFailedPseudoLic(lic.(string), domainNm)
+		// 	if count == 0 {
+		// 		w.WriteHeader(http.StatusBadRequest)
+		// 		return
+		// 	}
+		// }
 		fullname := m["fullname"]
 		mobileno := m["mobileno"]
 		dt := time.Now()
@@ -90,7 +92,8 @@ func SubmitChat(w http.ResponseWriter, r *http.Request) {
 		extraInfo := m["extrainfo"]
 
 		regId := pborman.NewRandom().String()
-		_, userId, avatarUrl, welcomeMsg := registerMatrixChatUser(fullname.(string), mobileno.(string), extraInfo, newFriezeChatAccessCode, domainNm, regId)
+		session := getSessionId(fullname.(string), mobileno.(string), extraInfo, newFriezeChatAccessCode, domainNm, regId)
+		_, userId, avatarUrl, welcomeMsg := registerMatrixChatUser(fullname.(string), mobileno.(string), extraInfo, newFriezeChatAccessCode, domainNm, regId, session)
 		newJWTToken, _ := GenerateTokenWithUserID(newFriezeChatAccessCode, domainNm, userId, fullname.(string))
 		tokenJson := Token{newJWTToken, avatarUrl, welcomeMsg}
 
@@ -139,7 +142,8 @@ func OpenChat(w http.ResponseWriter, r *http.Request) {
 			mobileno = mobileno.(string)[0:10]
 		}
 		regId := pborman.NewRandom().String()
-		_, userId, avatarUrl, welcomeMsg := registerMatrixChatUser(fullname.(string), mobileno.(string), nil, newFriezeChatAccessCode, domainNm, regId)
+		sess := getSessionId(fullname.(string), mobileno.(string), nil, newFriezeChatAccessCode, domainNm, regId)
+		_, userId, avatarUrl, welcomeMsg := registerMatrixChatUser(fullname.(string), mobileno.(string), nil, newFriezeChatAccessCode, domainNm, regId, sess)
 		newJWTToken, _ := GenerateTokenWithUserID(newFriezeChatAccessCode, domainNm, userId, fullname.(string))
 		tokenJson := Token{newJWTToken, avatarUrl, welcomeMsg}
 
@@ -521,12 +525,39 @@ func getMatrixAccessCode(friezeAccessCode string, domainName string) (string, st
 	matAccCodeStmt.QueryRow(friezeAccessCode, domainName).Scan(&matAccCodeStr, &regId)
 	return "", matAccCodeStr
 }
+func getSessionId(fullname string, mobileno string, extraInfo interface{},
+	friezeAccessCode string, domainName string, regId string) string {
+	username := friezeAccessCode[:5]
+	jsonData := map[string]interface{}{
+		"username":      "A" + username,
+		"password":      "palava123",
+		"bind_email":    false,
+		"bind_msisdn":   false,
+		"x_show_msisdn": false,
+	}
+	apiHost := "http://%s/_matrix/client/r0/register"
+	endpoint := fmt.Sprintf(apiHost, GetMatrixServerUrl())
+	jsonValue, _ := json.Marshal(jsonData)
+	response, err := http.Post(endpoint, "application/json", bytes.NewBuffer(jsonValue))
+	if err != nil {
+		fmt.Printf("The HTTP request failed with error %s\n", err)
+		return ""
+	} else {
+		data, _ := ioutil.ReadAll(response.Body)
+		var f interface{}
+		json.Unmarshal([]byte(data), &f)
+
+		m := f.(map[string]interface{})
+		session := m["session"].(string)
+		return session
+	}
+}
 func registerMatrixChatUser(fullname string, mobileno string, extraInfo interface{},
-	friezeAccessCode string, domainName string, regId string) (string, string, string, string) {
+	friezeAccessCode string, domainName string, regId string, session string) (string, string, string, string) {
 	username := friezeAccessCode[:5]
 	jsonData := map[string]interface{}{
 		"auth": map[string]string{
-			"session": "ffdfdasfdsfadsf",
+			"session": session,
 			"type":    "m.login.dummy",
 		},
 		"username":      "A" + username,

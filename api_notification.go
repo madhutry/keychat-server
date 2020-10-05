@@ -1,4 +1,4 @@
-package friezechat
+package main
 
 import (
 	"encoding/json"

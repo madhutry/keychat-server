@@ -1,0 +1,3 @@
+{
+    "DB_URL":"postgres://***REMOVED***:***REMOVED***@172.17.0.3:5432/friezechat?sslmode=disable"
+}

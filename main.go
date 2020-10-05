@@ -14,17 +14,18 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 
-	sw "./go"
 	_ "github.com/lib/pq"
 )
 
 func main() {
+	os.Setenv("HTTP_PROXY", "http://localhost:5555")
 	fmt.Println("New version Chat Server:1")
-	router := sw.NewRouter()
-	sw.InitConfig()
-	go sw.HandleMessages()
-	sw.InitPostgres()
+	router := NewRouter()
+	InitConfig()
+	go HandleMessages()
+	InitPostgres()
 	log.Printf("Server startead")
 	log.Fatal(http.ListenAndServe(":6060", limit(router)))
 }

@@ -1,4 +1,4 @@
-package friezechat
+package main
 
 import (
 	"fmt"
@@ -9,20 +9,26 @@ import (
 )
 
 func InitConfig() {
-	home, _ := os.UserHomeDir()
+	fmt.Println("Initializing..")
+	wd, _ := os.Getwd()
+
+	fmt.Println("WD:" + wd)
 	if os.Getenv("ENVIRONMENT") == "DEV" {
 		fmt.Println("loafing dev env")
 		viper.SetConfigName("server")
 		viper.SetConfigType("json")
-		viper.AddConfigPath(filepath.Dir(home + "/"))
+		viper.AddConfigPath(filepath.Dir(wd + "/"))
 		viper.ReadInConfig()
 	} else {
+		fmt.Println("Env...")
 		viper.AutomaticEnv()
 	}
 
 }
 
 func GetDBUrl() string {
+	fmt.Println("DBURL:")
+	fmt.Println(viper.GetString("DB_URL"))
 	return viper.GetString("DB_URL")
 }
 func GetMatrixServerUrl() string {
