@@ -9,6 +9,6 @@ RUN go build -o /out/chatserver .
 
 FROM scratch AS bin
 COPY --from=build /out/chatserver /
-
+EXPOSE 6060
 CMD ["./chatserver"]
 
