@@ -14,13 +14,11 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os"
 
 	_ "github.com/lib/pq"
 )
 
 func main() {
-	os.Setenv("HTTP_PROXY", "http://localhost:5555")
 	fmt.Println("New version Chat Server:1")
 	router := NewRouter()
 	InitConfig()
