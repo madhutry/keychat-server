@@ -121,6 +121,13 @@ var routes = Routes{
 		false,
 	},
 	Route{
+		"RegisterOwnerAgent",
+		strings.ToUpper("Post"),
+		"/chat/registeragent",
+		apiRegisterOwnerAgent,
+		false,
+	},
+	Route{
 		"UpgradeWS",
 		strings.ToUpper("get"),
 		"/ws",

@@ -91,7 +91,8 @@ func SubmitChat(w http.ResponseWriter, r *http.Request) {
 		extraInfo := m["extrainfo"]
 
 		regId := pborman.NewRandom().String()
-		session := getSessionId(fullname.(string), mobileno.(string), extraInfo, newFriezeChatAccessCode, domainNm, regId)
+		username := newFriezeChatAccessCode[:5]
+		session := getSessionId("A" + username)
 		_, userId, avatarUrl, welcomeMsg := registerMatrixChatUser(fullname.(string), mobileno.(string), extraInfo, newFriezeChatAccessCode, domainNm, regId, session)
 		newJWTToken, _ := GenerateTokenWithUserID(newFriezeChatAccessCode, domainNm, userId, fullname.(string))
 		tokenJson := Token{newJWTToken, avatarUrl, welcomeMsg}
@@ -141,7 +142,8 @@ func OpenChat(w http.ResponseWriter, r *http.Request) {
 			mobileno = mobileno.(string)[0:10]
 		}
 		regId := pborman.NewRandom().String()
-		sess := getSessionId(fullname.(string), mobileno.(string), nil, newFriezeChatAccessCode, domainNm, regId)
+		username := newFriezeChatAccessCode[:5]
+		sess := getSessionId("A" + username)
 		_, userId, avatarUrl, welcomeMsg := registerMatrixChatUser(fullname.(string), mobileno.(string), nil, newFriezeChatAccessCode, domainNm, regId, sess)
 		newJWTToken, _ := GenerateTokenWithUserID(newFriezeChatAccessCode, domainNm, userId, fullname.(string))
 		tokenJson := Token{newJWTToken, avatarUrl, welcomeMsg}
@@ -258,6 +260,7 @@ func dbInsertMessageCardResponse(mesgId string, mesg string, eventId string) {
 		panic(err)
 	}
 }
+
 func dbInsertRegistrationExtra(fullName string, mobile string, extra interface{},
 	friezeAccessCode string, regId string, roomId string, roomAlias string, prevBatchId string, userId string) {
 
@@ -455,15 +458,15 @@ func dbGetAgents(domainName string) ([]string, []string, []string, []string) {
 	}
 	return userIds, displayNames, matAccCodes, timeRecds
 }
-func dbGetDomainRelatedData(domainName string) ([]string, [][]string) {
+func dbGetDomainRelatedData(domainName string) ([]string, [][]string, []int16, []int) {
 
 	matAccCode := `SELECT 
-	1,matrix_access_code,avatar_img_url,display_name
-	FROM mat_acc_cd_owner
+	1,matrix_access_code,avatar_img_url,display_name,a.id
+	FROM mat_acc_cd_owner a
 	WHERE domain_name=$1
 UNION
 SELECT 
-	2,b.matrix_access_code,b.avatar_img_url,b.display_name
+	2,b.matrix_access_code,b.avatar_img_url,b.display_name,a.id
 	FROM mat_acc_cd_owner a, agents b
 	WHERE domain_name=$2
 	and a.id=b.main_owner_id order by 1
@@ -479,19 +482,24 @@ SELECT
 		log.Fatal(err)
 	}
 	defer rows.Close()
+	var orders []int16
+	var ids []int
 	var codes []string
 	var statusInfo [][]string
 	for rows.Next() {
 		var order int16
+		var id int
 		var accCd string
 		var avatarUrl string
 		var welcomeMsg string
-		rows.Scan(&order, &accCd, &avatarUrl, &welcomeMsg)
+		rows.Scan(&order, &accCd, &avatarUrl, &welcomeMsg, &id)
 		result := []string{avatarUrl, welcomeMsg}
+		orders = append(orders, order)
+		ids = append(ids, id)
 		codes = append(codes, accCd)
 		statusInfo = append(statusInfo, result)
 	}
-	return codes, statusInfo
+	return codes, statusInfo, orders, ids
 }
 func dbInsertNewAccessCode(matrixAccessCode string, friezeChatAccessCode string, domainName string, regId string) {
 	addAccessCodeMap := `INSERT INTO access_code_map 
@@ -524,9 +532,7 @@ func getMatrixAccessCode(friezeAccessCode string, domainName string) (string, st
 	matAccCodeStmt.QueryRow(friezeAccessCode, domainName).Scan(&matAccCodeStr, &regId)
 	return "", matAccCodeStr
 }
-func getSessionId(fullname string, mobileno string, extraInfo interface{},
-	friezeAccessCode string, domainName string, regId string) string {
-	username := friezeAccessCode[:5]
+func getSessionId(username string) string {
 	jsonData := map[string]interface{}{
 		"username":      "A" + username,
 		"password":      "palava123",
@@ -551,6 +557,7 @@ func getSessionId(fullname string, mobileno string, extraInfo interface{},
 		return session
 	}
 }
+
 func registerMatrixChatUser(fullname string, mobileno string, extraInfo interface{},
 	friezeAccessCode string, domainName string, regId string, session string) (string, string, string, string) {
 	username := friezeAccessCode[:5]
@@ -588,7 +595,7 @@ func registerMatrixChatUser(fullname string, mobileno string, extraInfo interfac
 		apiPutDisplayName(matrixAccessCode, userId, fullname)
 		roomId, roomAlias := apiCreateRoom(matrixAccessCode, fullname, username, mobileno)
 		log.Println("Adding Owner to room :" + domainName)
-		ownerDetails, profileInfo := dbGetDomainRelatedData(domainName)
+		ownerDetails, profileInfo, _, _ := dbGetDomainRelatedData(domainName)
 		accessCdAdmin := GetMatrixAdminCode()
 		accessCodes := append(ownerDetails, accessCdAdmin)
 		apiJoinRoom(accessCodes, roomId)
