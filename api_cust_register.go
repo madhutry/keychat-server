@@ -34,15 +34,15 @@ func SaveRegister(w http.ResponseWriter, r *http.Request) {
 		log.Fatal(err)
 	}
 	m := gomail.NewMessage()
-	m.SetHeader("From", "***REMOVED***")
-	m.SetHeader("To", "***REMOVED***")
+	m.SetHeader("From", "madhukar.stock@gmail.com")
+	m.SetHeader("To", "madhukar.tryambake@gmail.com")
 	m.SetHeader("Subject", "New Registration!")
 	name := fullname
 	email := emailid
 	mesg := "You have new registration."
 
 	m.SetBody("text/html", fmt.Sprintf(emailTemplate, name, email, mesg))
-	d := gomail.NewDialer("smtp.gmail.com", 587, "***REMOVED***", "***REMOVED***")
+	d := gomail.NewDialer("smtp.gmail.com", 587, "javamelon@gmail.com", "lpeamtyeppdcyvxs")
 	if err := d.DialAndSend(m); err != nil {
 		log.Println("Could Send Email..")
 	}
