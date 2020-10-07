@@ -461,12 +461,12 @@ func dbGetAgents(domainName string) ([]string, []string, []string, []string) {
 func dbGetDomainRelatedData(domainName string) ([]string, [][]string, []int16, []int) {
 
 	matAccCode := `SELECT 
-	1,matrix_access_code,avatar_img_url,display_name,a.id
+	1,matrix_access_code,a.id,display_name,avatar_img_url
 	FROM mat_acc_cd_owner a
 	WHERE domain_name=$1
 UNION
 SELECT 
-	2,b.matrix_access_code,b.avatar_img_url,b.display_name,a.id
+	2,b.matrix_access_code,a.id,b.display_name,b.avatar_img_url
 	FROM mat_acc_cd_owner a, agents b
 	WHERE domain_name=$2
 	and a.id=b.main_owner_id order by 1
@@ -492,7 +492,7 @@ SELECT
 		var accCd string
 		var avatarUrl string
 		var welcomeMsg string
-		rows.Scan(&order, &accCd, &avatarUrl, &welcomeMsg, &id)
+		rows.Scan(&order, &accCd, &id, &welcomeMsg, &avatarUrl)
 		result := []string{avatarUrl, welcomeMsg}
 		orders = append(orders, order)
 		ids = append(ids, id)

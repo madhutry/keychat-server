@@ -11,11 +11,9 @@
 package main
 
 import (
-	"database/sql"
 	"fmt"
 	"log"
 	"net/http"
-	"os"
 
 	_ "github.com/lib/pq"
 )
@@ -26,27 +24,6 @@ func main() {
 	InitConfig()
 	go HandleMessages()
 	InitPostgres()
-	loadAdminInfoEnv()
 	log.Printf("Server startead")
 	log.Fatal(http.ListenAndServe(":6060", limit(router)))
-}
-
-func loadAdminInfoEnv() {
-	_, acc_cd, _ := dbFetchAdminInfo()
-	os.Setenv("MATRIX_ADMIN_ACCESS_CODE", acc_cd)
-}
-
-func dbFetchAdminInfo() (string, string, string) {
-	fetchAdminInfo := "SELECT userid,access_code,filter_id FROM public.admin_info where active='Y'"
-	var userId sql.NullString
-	var accessCode sql.NullString
-	var filterId sql.NullString
-	db := Envdb.db
-
-	fetchBatchIdStmt, err := db.Prepare(fetchAdminInfo)
-	if err != nil {
-		log.Fatal(err)
-	}
-	fetchBatchIdStmt.QueryRow().Scan(&userId, &accessCode, &filterId)
-	return userId.String, accessCode.String, filterId.String
 }
