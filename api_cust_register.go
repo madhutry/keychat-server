@@ -42,7 +42,7 @@ func SaveRegister(w http.ResponseWriter, r *http.Request) {
 	mesg := "You have new registration."
 
 	m.SetBody("text/html", fmt.Sprintf(emailTemplate, name, email, mesg))
-	d := gomail.NewDialer("smtp.gmail.com", 587, "***REMOVED***", "***REMOVED***")
+	d := gomail.NewDialer("smtp.gmail.com", 587, "someone@gmail.com", "paswd")
 	if err := d.DialAndSend(m); err != nil {
 		log.Println("Could Send Email..")
 	}
