@@ -34,8 +34,8 @@ func SaveRegister(w http.ResponseWriter, r *http.Request) {
 		log.Fatal(err)
 	}
 	m := gomail.NewMessage()
-	m.SetHeader("From", "***REMOVED***")
-	m.SetHeader("To", "***REMOVED***")
+	m.SetHeader("From", "someone@gmail.com")
+	m.SetHeader("To", "someone@gmail.com")
 	m.SetHeader("Subject", "New Registration!")
 	name := fullname
 	email := emailid
