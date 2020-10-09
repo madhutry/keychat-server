@@ -11,7 +11,7 @@
             "request": "launch",
             "mode": "auto",
             "program": "${workspaceFolder}",
-            "env": {"DB_URL":"postgres://keychatusr1:password@localhost:5432/friezechat?sslmode=disable",
+            "env": {"DB_URL":"postgres://keychatusr1:password@localhost:5432/keychatdb?sslmode=disable",
                     "MATRIX_URL":"localhost:8008",
                 },
             "args": []
