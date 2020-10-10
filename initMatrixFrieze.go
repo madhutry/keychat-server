@@ -30,7 +30,7 @@ func apiRegisterOwnerAgent(w http.ResponseWriter, r *http.Request) {
 			"type":    "m.login.dummy",
 		},
 		"username":      username,
-		"password":      "palava123",
+		"password":      "keychat",
 		"bind_email":    false,
 		"bind_msisdn":   false,
 		"x_show_msisdn": false,

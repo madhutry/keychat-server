@@ -535,7 +535,7 @@ func getMatrixAccessCode(friezeAccessCode string, domainName string) (string, st
 func getSessionId(username string) string {
 	jsonData := map[string]interface{}{
 		"username":      "A" + username,
-		"password":      "palava123",
+		"password":      "keychat",
 		"bind_email":    false,
 		"bind_msisdn":   false,
 		"x_show_msisdn": false,
@@ -567,7 +567,7 @@ func registerMatrixChatUser(fullname string, mobileno string, extraInfo interfac
 			"type":    "m.login.dummy",
 		},
 		"username":      "A" + username,
-		"password":      "palava123",
+		"password":      "keychat",
 		"bind_email":    false,
 		"bind_msisdn":   false,
 		"x_show_msisdn": false,
